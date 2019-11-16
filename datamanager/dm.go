@@ -183,6 +183,10 @@ func (dm *DataManager) downloadHandler(path string, w io.Writer) {
 		delete(blocks, nextBlock)
 		nextBlock += 1
 	}
+
+	for i := 0; i < 8; i+= 1{
+		d <- -1
+	}
 }
 
 func (dm *DataManager) LoadServer(addr string, port int) {
