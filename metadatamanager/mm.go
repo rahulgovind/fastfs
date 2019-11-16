@@ -15,7 +15,7 @@ import (
 	"sync"
 )
 
-const BlockSize int64 = 16 * 1024 * 1024
+const BlockSize int64 = 4 * 1024 * 1024
 
 // Path: block b at file/base/blocks[block]
 type CompactedFile struct {
