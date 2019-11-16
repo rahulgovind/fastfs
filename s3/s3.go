@@ -3,11 +3,14 @@ package s3
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -143,6 +146,62 @@ func ByteSpeed(numBytes int64, elapsed time.Duration) string {
 		float64(speed)/float64(div), "kMGTPE"[exp])
 }
 
+type FakeWriterAt struct {
+	w io.Writer
+}
+
+func (fw *FakeWriterAt) WriteAt(p []byte, offset int64) (n int, err error) {
+	// ignore 'offset' because we forced sequential downloads
+	return fw.w.Write(p)
+}
+
+func GetDownloader() *s3manager.Downloader {
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-2")},
+	)
+	downloader := s3manager.NewDownloader(sess)
+	return downloader
+}
+
+func DownloadToFileWithDownloader(bucket string, downloader *s3manager.Downloader,
+	path string, file io.WriterAt, offset int64, size int64) error {
+
+	var rng string
+	if size == -1 {
+		rng = "bytes=0-"
+	} else {
+		rng = fmt.Sprintf("bytes=%d-%d", offset, offset+size-1)
+	}
+
+	start := time.Now()
+	numBytes, err := downloader.Download(
+		file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(path),
+			Range:  aws.String(rng),
+		})
+
+	elapsed := time.Since(start)
+	log.Infof("Downloaded %v\tSize: %v bytes\tTime: %v\tSpeed: %v",
+		path, numBytes, elapsed,
+		ByteSpeed(numBytes, elapsed),
+	)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "InvalidRange") {
+			return nil
+		}
+		log.Fatalf("Unable to download item %q, %v", path, err)
+	}
+
+	return nil
+}
+
+func DownloadToFile(bucket string, path string, file io.WriterAt, offset int64, size int64) error {
+	return DownloadToFileWithDownloader(bucket, GetDownloader(), path, file, offset, size)
+}
+
 func DownloadObject(bucket string, path string, outputFilename string) error {
 	file, err := os.Create(outputFilename)
 	if err != nil {
@@ -151,29 +210,16 @@ func DownloadObject(bucket string, path string, outputFilename string) error {
 
 	defer file.Close()
 
-	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-2")},
-	)
+	return DownloadToFile(bucket, path, file, 0, -1)
+}
 
-	start := time.Now()
-	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(path),
-		})
+func DownloadToWriterPartial(bucket string, downloader *s3manager.Downloader,
+	path string, writer io.Writer, offset int64, size int64) error {
+	return DownloadToFileWithDownloader(bucket, downloader, path, &FakeWriterAt{writer}, offset, size)
+}
 
-	if err != nil {
-		log.Fatalf("Unable to download item %q, %v", path, err)
-	}
-
-	elapsed := time.Since(start)
-
-	log.Infof("Downloaded %v\tSize: %v bytes\tTime: %v\tSpeed: %v",
-		file.Name(), numBytes, elapsed,
-		ByteSpeed(numBytes, elapsed),
-	)
-	return nil
+func DownloadToWriter(bucket string, path string, writer io.Writer) error {
+	return DownloadToWriterPartial(bucket, GetDownloader(), path, writer, 0, -1)
 }
 
 func PrintObjects(bucket string, prefix string, delimiter string) {
@@ -197,4 +243,68 @@ func PrintObjects(bucket string, prefix string, delimiter string) {
 
 	fmt.Println("Found", len(resp.Contents), "items in bucket", bucket)
 	fmt.Println("")
+}
+
+func CopyObject(bucket string, src string, dest string) error {
+	svc := getS3Client(bucket)
+
+	result, err := svc.CopyObject(&s3.CopyObjectInput{
+		Bucket:     aws.String(bucket),
+		CopySource: aws.String("/" + bucket + "/" + src),
+		Key:        aws.String(dest),
+	})
+
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeObjectNotInActiveTierError:
+				log.Error(s3.ErrCodeObjectNotInActiveTierError, aerr.Error())
+			default:
+				log.Error(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			log.Error(err.Error())
+		}
+		return err
+	}
+
+	log.Info(result)
+	return nil
+}
+
+func DeleteObject(bucket string, key string) error {
+	svc := getS3Client(bucket)
+
+	result, err := svc.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				log.Error(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			log.Error(err.Error())
+		}
+		return err
+	}
+
+	log.Info(result)
+	return nil
+}
+
+func MoveObject(bucket string, src string, dest string) error {
+	err := CopyObject(bucket, src, dest)
+	if err != nil {
+		return err
+	}
+	err = DeleteObject(bucket, src)
+	return err
 }
