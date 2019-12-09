@@ -11,10 +11,10 @@ type HybridCache struct {
 	dc *diskcache.DiskCache
 }
 
-func NewHybridCache(maxMemEntries int, maxDiskEntries int, blockSize int, filename string) *HybridCache {
+func NewHybridCache(maxMemEntries int, maxDiskEntries int, blockSize int, filename string, iotype int) *HybridCache {
 	hc := new(HybridCache)
 	hc.mc = memcache.NewMemCache(maxMemEntries)
-	hc.dc = diskcache.NewDiskCache(maxDiskEntries, blockSize, filename)
+	hc.dc = diskcache.NewDiskCache(maxDiskEntries, blockSize, filename, iotype)
 	hc.mc.OnEvicted = hc.handleMemEvict
 	return hc
 }

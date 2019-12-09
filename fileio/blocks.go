@@ -1,4 +1,4 @@
-package mmap
+package fileio
 
 import (
 	"errors"
@@ -24,19 +24,30 @@ type BlockManager struct {
 	filename  string
 	blockSize int
 	numBlocks int
-	data      []byte
-	mm        *MMap
+	io        FileIO
 	freeList  *queue.Queue
 	nextId    int
 	blockMap  map[int]*Block
 }
 
-func NewBlockManager(filename string, numBlocks int, blockSize int) *BlockManager {
+const (
+	MMapInterface = 1
+	FileInterface = 2
+)
+
+func NewBlockManager(filename string, numBlocks int, blockSize int, iotype int) *BlockManager {
 	bm := new(BlockManager)
 	bm.blockSize = blockSize
 	bm.numBlocks = numBlocks
-	bm.mm = NewMMap(filename, blockSize*numBlocks)
-	bm.data = bm.mm.GetData()
+
+	if iotype == MMapInterface {
+		bm.io = NewMMapIO(filename, blockSize*numBlocks)
+	} else if iotype == FileInterface {
+		bm.io = NewDirectFileIO(filename, blockSize*numBlocks)
+	} else {
+		logrus.Fatal("Invalid IO Type")
+	}
+
 	bm.freeList = queue.New(int64(numBlocks))
 	bm.nextId = 0
 	bm.blockMap = make(map[int]*Block)
@@ -71,7 +82,7 @@ func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
 	go func() {
 		offset := idx * bm.blockSize
 		startTime := time.Now()
-		copy(bm.data[offset:offset+len(block.data)], block.data)
+		bm.io.WriteAt(offset, block.data)
 		elapsed := time.Since(startTime)
 		if false {
 			logrus.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
@@ -98,8 +109,9 @@ func (bm *BlockManager) Get(blockId int, n int) ([]byte, error) {
 		if block.inMemory {
 			copy(res, block.data)
 		} else {
-			copy(res, bm.data[offset:offset+n])
+			copy(res, bm.io.ReadAt(offset, n))
 		}
+
 		block.mu.RUnlock()
 		return res, nil
 	}

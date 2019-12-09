@@ -1,4 +1,4 @@
-package mmap
+package fileio
 
 import (
 	"fmt"
@@ -12,6 +12,11 @@ type MMap struct {
 	file     *os.File
 	filename string
 	data     []byte
+}
+
+type MMapIO struct {
+	data []byte
+	mm   *MMap
 }
 
 func NewMMap(filename string, size int) *MMap {
@@ -42,7 +47,7 @@ func (mm *MMap) open() {
 }
 
 func (mm *MMap) mmap(size int) {
-	log.Info("mmapping: ", size)
+	log.Info("mmapping: ", size, int64(size))
 	data, err := syscall.Mmap(mm.fd, 0, size, syscall.PROT_WRITE|syscall.PROT_READ, syscall.MAP_PRIVATE)
 	if err != nil {
 		log.Error("Error mmapping: ", err)
@@ -57,6 +62,21 @@ func (mm *MMap) extend(size int) {
 	mm.mmap(size)
 }
 
+func NewMMapIO(filename string, size int) *MMapIO {
+	mmio := new(MMapIO)
+	mmio.mm = NewMMap(filename, size)
+	mmio.data = mmio.mm.GetData()
+	return mmio
+}
+
 func (mm *MMap) GetData() []byte {
 	return mm.data
+}
+
+func (mmio *MMapIO) ReadAt(offset int, size int) []byte {
+	return mmio.data[offset : offset+size]
+}
+
+func (mmio *MMapIO) WriteAt(offset int, b []byte) {
+	copy(mmio.data[offset:offset+len(b)], b)
 }

@@ -2,7 +2,7 @@ package diskcache
 
 import (
 	"container/list"
-	"github.com/rahulgovind/fastfs/mmap"
+	"github.com/rahulgovind/fastfs/fileio"
 	"sync"
 )
 
@@ -19,7 +19,7 @@ type DiskCache struct {
 	ll        *list.List
 	cache     map[interface{}]*list.Element
 	blockSize int
-	bm        *mmap.BlockManager
+	bm        *fileio.BlockManager
 
 	mu sync.RWMutex
 }
@@ -36,12 +36,12 @@ type entry struct {
 // NewDiskCache creates a new DiskCache.
 // If maxEntries is zero, the cache has no limit and it's assumed
 // that eviction is done by the caller.
-func NewDiskCache(maxEntries int, blockSize int, filename string) *DiskCache {
+func NewDiskCache(maxEntries int, blockSize int, filename string, iotype int) *DiskCache {
 	return &DiskCache{
 		MaxEntries: maxEntries,
 		ll:         list.New(),
 		cache:      make(map[interface{}]*list.Element),
-		bm:         mmap.NewBlockManager(filename, maxEntries+100, blockSize),
+		bm:         fileio.NewBlockManager(filename, maxEntries+100, blockSize, iotype),
 	}
 }
 

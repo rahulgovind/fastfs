@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/rahulgovind/fastfs/cache/hybridcache"
 	"github.com/rahulgovind/fastfs/datamanager"
+	"github.com/rahulgovind/fastfs/fileio"
 	"github.com/rahulgovind/fastfs/s3"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -37,7 +38,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	hc := hybridcache.NewHybridCache(32, 512, 1024*1024, "testdata")
+	hc := hybridcache.NewHybridCache(64, 512, 1024*1024, "testdata",
+		fileio.FileInterface)
 	dm := datamanager.New(bucket, 16, hc, 1024*1024)
 	mm := s3.NewS3MetadataManager(bucket)
 	partitioner := NewHashPartitioner()
