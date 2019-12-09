@@ -12,7 +12,7 @@ type DirectFileIO struct {
 func NewDirectFileIO(filename string, size int) *DirectFileIO {
 	dfio := new(DirectFileIO)
 
-	file, err := os.Open(filename)
+	file, err := os.Create(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 		log.Fatal(err)
 	}
 
-	file, err = os.Open(filename)
+	file, err = os.Create(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
