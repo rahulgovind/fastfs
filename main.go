@@ -37,8 +37,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	hc := hybridcache.NewHybridCache(32, 1024, 1024*1024, "testdata")
-	dm := datamanager.New(bucket, 5, hc, 1024*1024)
+	hc := hybridcache.NewHybridCache(32, 512, 1024*1024, "testdata")
+	dm := datamanager.New(bucket, 16, hc, 1024*1024)
 	mm := s3.NewS3MetadataManager(bucket)
 	partitioner := NewHashPartitioner()
 	fastfs := NewFastFS(port, partitioner)

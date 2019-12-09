@@ -39,7 +39,7 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *s3.Metada
 }
 
 func (s *Server) rangeHandler(path string, w io.Writer) {
-	ag := datamanager.NewAggregator(5, path, s.dm)
+	ag := datamanager.NewAggregator(16, path, s.dm)
 	ag.WriteTo(w)
 }
 

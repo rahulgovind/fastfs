@@ -3,7 +3,6 @@ package diskcache
 import (
 	"container/list"
 	"github.com/rahulgovind/fastfs/mmap"
-	"github.com/sirupsen/logrus"
 	"sync"
 )
 
@@ -104,7 +103,6 @@ func (c *DiskCache) Remove(key string) {
 
 // RemoveOldest removes the oldest item from the cache.
 func (c *DiskCache) RemoveOldest() {
-	logrus.Fatal("Evicting element")
 	if c.cache == nil {
 		return
 	}
