@@ -2,9 +2,9 @@ package datamanager
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -58,15 +58,6 @@ func NewFastServer(addr string, port int, handler func(path string, w io.Writer)
 	return s
 }
 
-//
-//type FastHandler struct {
-//	s *FastServer
-//}
-//
-//func (h FastHandler) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
-//	h.s.HandleFastHTTP(ctx)
-//}
-
 func (s *FastServer) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	path := strings.TrimLeft(string(ctx.RequestURI()), "/")
 	s.handler(path, ctx)
@@ -77,4 +68,16 @@ func (s *FastServer) Serve() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (dm *DataManager) downloadHandler(path string, w io.Writer) {
+	log.Debugf("Received file request %v", path)
+	ag := NewAggregator(8, path, dm)
+	ag.WriteTo(w)
+}
+
+func (dm *DataManager) LoadServer(addr string, port int) {
+	log.Infof("Loading file server at %v:%v", addr, port)
+	s := NewServer(addr, port, dm.downloadHandler)
+	s.Serve()
 }
