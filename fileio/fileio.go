@@ -17,7 +17,9 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 		log.Fatal(err)
 	}
 
+	file.Truncate(int64(size))
 	dfio.file = file
+
 	return dfio
 }
 
