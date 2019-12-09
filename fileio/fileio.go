@@ -18,6 +18,15 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 	}
 
 	file.Truncate(int64(size))
+	err = file.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	file, err = os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
 	dfio.file = file
 
 	return dfio
