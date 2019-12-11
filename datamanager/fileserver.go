@@ -73,7 +73,7 @@ func (s *FastServer) Serve() {
 func (dm *DataManager) downloadHandler(path string, w io.Writer) {
 	log.Debugf("Received file request %v", path)
 	ag := NewAggregator(8, path, 0, -1, dm)
-	ag.WriteTo(w)
+	ag.WriteTo(&FakeWriteCloser{w})
 }
 
 func (dm *DataManager) LoadServer(addr string, port int) {

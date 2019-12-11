@@ -1,7 +1,6 @@
 package datamanager
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"time"
@@ -39,7 +38,7 @@ func (ag *Aggregator) downloadBlock(blockCh chan int, out chan *BlockData) {
 	for {
 		block := <-blockCh
 
-		log.Debugf("look-ahead %v", block)
+		//log.Debugf("look-ahead %v", block)
 		if block == -1 {
 			break
 		}
@@ -49,12 +48,12 @@ func (ag *Aggregator) downloadBlock(blockCh chan int, out chan *BlockData) {
 			log.Fatal(err)
 		}
 
-		log.Infof("Got data from Get. Block: %v, Length: %v", block, len(data))
+		//log.Infof("Got data from Get. Block: %v, Length: %v", block, len(data))
 		out <- &BlockData{data, block}
 	}
 }
 
-func (ag *Aggregator) WriteTo(w io.Writer) {
+func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 
 	blockSize := ag.getter.GetBlockSize()
 	startBlock := ag.start / ag.getter.GetBlockSize()
@@ -74,7 +73,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 	for i := 0; i < ag.numParallel; i++ {
 		d <- nextDownload
 		nextDownload += 1
-		log.Infof("Added %v", nextDownload-1)
+		//log.Infof("Added %v", nextDownload-1)
 		go ag.downloadBlock(d, out)
 	}
 
@@ -84,7 +83,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 		}
 
 		bd := <-out
-		log.Infof("Got block %v. Length: %v ", bd.block, len(bd.data))
+		//log.Infof("Got block %v. Length: %v ", bd.block, len(bd.data))
 
 		if len(bd.data) < int(ag.getter.GetBlockSize()) {
 			blocks[bd.block] = bd
@@ -96,7 +95,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 
 		for {
 
-			log.Infof("Waiting for block %v", nextBlock)
+			//log.Infof("Waiting for block %v", nextBlock)
 			bdNext, ok := blocks[nextBlock]
 			if !ok {
 				break
@@ -107,7 +106,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 				nextDownload += 1
 			}
 
-			log.Infof("Added %v Length: %v", nextDownload, len(bdNext.data))
+			//log.Infof("Added %v Length: %v", nextDownload, len(bdNext.data))
 
 			startOffHere := 0
 			endOffHere := len(bdNext.data)
@@ -122,7 +121,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 
 			start := time.Now()
 			if endOffHere-startOffHere > 0 {
-				log.Debugf("Writing block %v", bdNext.block)
+				//log.Debugf("Writing block %v", bdNext.block)
 				w.Write(bdNext.data[startOffHere:endOffHere])
 			}
 			elapsed := time.Since(start)
@@ -142,7 +141,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 		//log.Infof("%v %v", nextBlock, nextDownload)
 		bdNext, ok := blocks[nextBlock]
 		if !ok {
-			log.Infof("Waiting for block %v", nextBlock)
+			//log.Infof("Waiting for block %v", nextBlock)
 			bd := <-out
 			//log.Infof("Got block %v", bd.version)
 			blocks[bd.block] = bd
@@ -161,7 +160,7 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 
 		start := time.Now()
 		if endOffHere-startOffHere > 0 {
-			log.Debugf("Writing block %v", bdNext.block)
+			//log.Debugf("Writing block %v", bdNext.block)
 			w.Write(bdNext.data[startOffHere:endOffHere])
 		}
 		elapsed := time.Since(start)
@@ -171,8 +170,20 @@ func (ag *Aggregator) WriteTo(w io.Writer) {
 		nextBlock += 1
 	}
 
-	fmt.Println("Done")
 	for i := 0; i < ag.numParallel; i += 1 {
 		d <- -1
 	}
+	w.Close()
+}
+
+type FakeWriteCloser struct {
+	Writer io.Writer
+}
+
+func (f *FakeWriteCloser) Write(b []byte) (int, error) {
+	return f.Writer.Write(b)
+}
+
+func (f *FakeWriteCloser) Close() error {
+	return nil
 }

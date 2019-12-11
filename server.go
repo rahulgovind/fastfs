@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"encoding/json"
 	"fmt"
 	"github.com/klauspost/pgzip"
@@ -43,7 +44,7 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *s3.Metada
 	return s
 }
 
-func (s *Server) rangeHandler(path string, w io.Writer, start int64, end int64) {
+func (s *Server) rangeHandler(path string, w io.WriteCloser, start int64, end int64) {
 
 	if end == -1 {
 		end = math.MaxInt32
@@ -79,21 +80,18 @@ type SetupResponse struct {
 	BlockSize int
 }
 
-func getWriterWraper(w http.ResponseWriter, encoding string) io.Writer {
+func getWriterWraper(w http.ResponseWriter, encoding string) io.WriteCloser {
 	if encoding == "gzip" {
 		log.Info("Using gzip compression")
 		w.Header().Set("Content-Encoding", "gzip")
-		//buf := bufio.NewWriterSize(w, 1024*1024)
 		return pgzip.NewWriter(w)
 	} else if encoding == "deflate" {
-		//log.Info("Using deflate compression")
-		return w
-		//w.Header().Set("Content-Encoding", "deflate")
-		//buf := bufio.NewWriterSize(w, 1024 * 1024)
-		//writer, _ := flate.NewWriter(ioutil.Discard, -1)
-		//return writer
+		log.Info("Using deflate compression")
+		w.Header().Set("Content-Encoding", "deflate")
+		writer, _ := flate.NewWriter(w, -1)
+		return writer
 	} else {
-		return w
+		return &datamanager.FakeWriteCloser{w}
 	}
 }
 
@@ -109,7 +107,7 @@ func (s *Server) queryHandler(path string, w http.ResponseWriter, start int64, e
 		startOffset = 0
 	}
 
-	s.rangeHandler(path, buf, startOffset, end)
+	s.rangeHandler(path, &datamanager.FakeWriteCloser{buf}, startOffset, end)
 	raw := csvutils.AlignedSlices(buf.Bytes(), startSkip, blockSize)
 	rows := bytes.Count(buf.Bytes(), []byte{0x0a}) * 2
 
@@ -122,10 +120,25 @@ func (s *Server) queryHandler(path string, w http.ResponseWriter, start int64, e
 	selectsimd.ExtractIndexForColumn(maskCommas, rowIndices[:r], colIndices[:r], uint64(col))
 	selectsimd.EvaluateCompareString(raw, colIndices[:r], condition, equal[:(r+63)>>6])
 	bts := selectsimd.ExtractCsv(equal[:(r+63)>>6], raw, rowIndices[:r])
+
 	fmt.Println("Processed query")
+
 	if len(bts) > 0 {
 		w.Write(bts)
 	}
+}
+
+func (s *Server) handleHead(w http.ResponseWriter, req *http.Request, path string) {
+	file := s.mm.Query(path)
+	if file == nil {
+		w.WriteHeader(404)
+		return
+	}
+
+	w.Header().Set("Content-Length", fmt.Sprintf("%v", file.FileSize))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Type", "binary/octet-stream")
+	return
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -141,13 +154,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println(req.Method)
 	if req.Method == "HEAD" {
-		file := s.mm.Query(path)
-		if file == nil {
-			w.WriteHeader(404)
-			return
-		}
-
-		w.Header().Set("Content-Length", fmt.Sprintf("%v", file.FileSize))
+		s.handleHead(w, req, path)
 		return
 	}
 
@@ -172,7 +179,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if block == "" {
 			encodingHeader := req.Header.Get("Accept-Encoding")
 			compression := ""
-			log.Infof("Encoding Header: %v", encodingHeader)
+
 			if strings.Contains(encodingHeader, "gzip") {
 				compression = "gzip"
 			} else if strings.Contains(encodingHeader, "deflate") {
@@ -181,12 +188,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			rangeString := req.Header.Get("Range")
 			if rangeString == "" {
-				if compression == "gzip" {
-					w2 := pgzip.NewWriter(w)
-					s.rangeHandler(path, w2, 0, -1)
-					w2.Close()
-					return
-				}
 				s.rangeHandler(path, getWriterWraper(w, compression), 0, -1)
 				return
 			}
