@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/rahulgovind/fastfs/cache/hybridcache"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/fileio"
@@ -14,6 +15,10 @@ func main() {
 	//defer profile.Start(profile.MemProfile).Stop()
 	var bucket string
 	var port int
+	fsPort := -1
+	addr := "localhost"
+	var primaryAddr string
+	var primaryPort int
 
 	log.SetLevel(log.DebugLevel)
 	app := cli.NewApp()
@@ -25,10 +30,34 @@ func main() {
 			Usage:       "S3 Bucket to use as backing store",
 			Destination: &bucket,
 		},
+		&cli.StringFlag{
+			Name:        "address",
+			Usage:       "System Address",
+			Destination: &addr,
+			Value:       "localhost",
+		},
 		&cli.IntFlag{
 			Name:        "port",
 			Usage:       "Port to use for membership service",
 			Destination: &port,
+			Value:       8000,
+		},
+		&cli.IntFlag{
+			Name:        "fsport",
+			Usage:       "Port to use for filesystem service",
+			Destination: &fsPort,
+			Value:       -1,
+		},
+		&cli.StringFlag{
+			Name:        "primary-addr",
+			Usage:       "Address of primary node",
+			Destination: &primaryAddr,
+			Value:       "localhost",
+		},
+		&cli.IntFlag{
+			Name:        "primary-port",
+			Usage:       "Port of primary node",
+			Destination: &primaryPort,
 			Value:       8000,
 		},
 	}
@@ -38,12 +67,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	hc := hybridcache.NewHybridCache(64, 512, 1024*1024, "testdata",
+	if fsPort == -1 {
+		fsPort = port + 100
+	}
+
+	hc := hybridcache.NewHybridCache(64 , 512 , 1024*1024, "testdata",
 		fileio.FileInterface)
 	dm := datamanager.New(bucket, 16, hc, 1024*1024)
 	mm := s3.NewS3MetadataManager(bucket)
 	partitioner := NewHashPartitioner()
-	fastfs := NewFastFS(port, partitioner)
+	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), partitioner)
 
 	//config := memberlist.DefaultLocalConfig()
 	//
@@ -54,7 +87,7 @@ func main() {
 	//list, err := memberlist.Create(config)
 	//fmt.Println(list)
 
-	s := NewServer("localhost", 8081, dm, mm, partitioner, fastfs)
+	s := NewServer(addr, fsPort, dm, mm, partitioner, fastfs)
 	s.Serve()
 	//s.LoadServer("", 8081)
 

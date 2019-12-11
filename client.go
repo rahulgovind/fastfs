@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Client struct {
@@ -24,16 +25,34 @@ func (c *Client) GetBlockSize() int {
 }
 
 func (c *Client) Get(path string, block int) ([]byte, error) {
-	url := fmt.Sprintf("http://%s/data/%s?block=%d?force=1", c.ServerAddr, path, block)
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
+	url := fmt.Sprintf("http://%s/data/%s?block=%d", c.ServerAddr, path, block)
 
-	buffer := new(bytes.Buffer)
-	_, err = io.Copy(buffer, resp.Body)
-	if err != nil {
-		return nil, err
+	maxRetries := 3
+	numRetries := 0
+	var buffer *bytes.Buffer
+
+	for {
+		resp, err := http.Get(url)
+		if err != nil {
+			numRetries += 1
+			if numRetries <= maxRetries {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, err
+		}
+
+		buffer = new(bytes.Buffer)
+		_, err = io.Copy(buffer, resp.Body)
+		if err != nil {
+			numRetries += 1
+			if numRetries <= maxRetries {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, err
+		}
+		break
 	}
 
 	return buffer.Bytes(), nil

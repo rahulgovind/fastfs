@@ -1,6 +1,7 @@
 package fileio
 
 import (
+	"io"
 	"log"
 	"os"
 )
@@ -35,7 +36,7 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 func (dfio *DirectFileIO) ReadAt(offset int, size int) []byte {
 	out := make([]byte, size)
 	n, err := dfio.file.ReadAt(out, int64(offset))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
 	out = out[:n]

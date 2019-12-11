@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/klauspost/pgzip"
+	"github.com/minio/select-simd"
+	"github.com/rahulgovind/fastfs/csvutils"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/s3"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,8 +43,25 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *s3.Metada
 	return s
 }
 
-func (s *Server) rangeHandler(path string, w io.Writer) {
-	ag := datamanager.NewAggregator(16, path, s.dm)
+func (s *Server) rangeHandler(path string, w io.Writer, start int64, end int64) {
+
+	if end == -1 {
+		end = math.MaxInt32
+	}
+
+	startBlock := start / int64(s.localClient.BlockSize)
+	endBlock := end / int64(s.localClient.BlockSize)
+
+	if end%int64(s.localClient.BlockSize) == 0 {
+		endBlock -= 1
+	}
+
+	numThreads := int64(16)
+	if endBlock-startBlock+int64(1) < numThreads {
+		numThreads = endBlock - startBlock + 1
+	}
+
+	ag := datamanager.NewAggregator(int(numThreads), path, int(start), int(end), s.localClient)
 	ag.WriteTo(w)
 }
 
@@ -57,6 +79,55 @@ type SetupResponse struct {
 	BlockSize int
 }
 
+func getWriterWraper(w http.ResponseWriter, encoding string) io.Writer {
+	if encoding == "gzip" {
+		log.Info("Using gzip compression")
+		w.Header().Set("Content-Encoding", "gzip")
+		//buf := bufio.NewWriterSize(w, 1024*1024)
+		return pgzip.NewWriter(w)
+	} else if encoding == "deflate" {
+		//log.Info("Using deflate compression")
+		return w
+		//w.Header().Set("Content-Encoding", "deflate")
+		//buf := bufio.NewWriterSize(w, 1024 * 1024)
+		//writer, _ := flate.NewWriter(ioutil.Discard, -1)
+		//return writer
+	} else {
+		return w
+	}
+}
+
+func (s *Server) queryHandler(path string, w http.ResponseWriter, start int64, end int64,
+	condition string, col int64) {
+	blockSize := s.localClient.BlockSize
+
+	buf := bytes.NewBuffer(nil)
+	startOffset := start - int64(s.localClient.BlockSize)
+	startSkip := start == 0
+
+	if startOffset < 0 {
+		startOffset = 0
+	}
+
+	s.rangeHandler(path, buf, startOffset, end)
+	raw := csvutils.AlignedSlices(buf.Bytes(), startSkip, blockSize)
+	rows := bytes.Count(buf.Bytes(), []byte{0x0a}) * 2
+
+	rowIndices := make([]uint32, rows)
+	maskCommas := make([]uint64, (len(raw)+63)>>6)
+	colIndices := make([]uint32, rows)
+	equal := make([]uint64, (rows+63)>>6)
+
+	r := selectsimd.ParseCsvAdjusted(raw, rowIndices, maskCommas)
+	selectsimd.ExtractIndexForColumn(maskCommas, rowIndices[:r], colIndices[:r], uint64(col))
+	selectsimd.EvaluateCompareString(raw, colIndices[:r], condition, equal[:(r+63)>>6])
+	bts := selectsimd.ExtractCsv(equal[:(r+63)>>6], raw, rowIndices[:r])
+	fmt.Println("Processed query")
+	if len(bts) > 0 {
+		w.Write(bts)
+	}
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	query := strings.TrimLeft(req.URL.Path, "/")
 	firstSlash := strings.Index(query, "/")
@@ -68,12 +139,71 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		path = query[firstSlash+1:]
 	}
 
+	fmt.Println(req.Method)
+	if req.Method == "HEAD" {
+		file := s.mm.Query(path)
+		if file == nil {
+			w.WriteHeader(404)
+			return
+		}
+
+		w.Header().Set("Content-Length", fmt.Sprintf("%v", file.FileSize))
+		return
+	}
+
+	fmt.Println("Accept-Encoding: ", req.Header.Get("Accept-Encoding"))
+
+	if cmd == "query" {
+		p := req.Header.Get("Range")
+		fmt.Println("Content-Range: ", p)
+		col := req.URL.Query().Get("col")
+		colNum, _ := strconv.ParseInt(col, 10, 64)
+
+		condition := req.URL.Query().Get("condition")
+		s.queryHandler(path, w, 0, -1, condition, colNum)
+		return
+	}
+
 	if cmd == "data" {
 		block := req.URL.Query().Get("block")
 		force := req.URL.Query().Get("force")
-
+		p := req.Header.Get("Range")
+		fmt.Println("Content-Range: ", p)
 		if block == "" {
-			s.rangeHandler(path, w)
+			encodingHeader := req.Header.Get("Accept-Encoding")
+			compression := ""
+			log.Infof("Encoding Header: %v", encodingHeader)
+			if strings.Contains(encodingHeader, "gzip") {
+				compression = "gzip"
+			} else if strings.Contains(encodingHeader, "deflate") {
+				compression = "deflate"
+			}
+
+			rangeString := req.Header.Get("Range")
+			if rangeString == "" {
+				if compression == "gzip" {
+					w2 := pgzip.NewWriter(w)
+					s.rangeHandler(path, w2, 0, -1)
+					w2.Close()
+					return
+				}
+				s.rangeHandler(path, getWriterWraper(w, compression), 0, -1)
+				return
+			}
+			ranges, err := parseRange(rangeString, math.MaxInt64)
+			fmt.Println("ranges: ", ranges)
+
+			if err != nil {
+				fmt.Println(err)
+				http.Error(w, "Requested Range Not Satisfiable", 416)
+				return
+			}
+			start := ranges[0].start
+			length := ranges[0].length
+
+			w.Header().Set("Content-Range", getRange(start, start+length-1, -1))
+			w.WriteHeader(206)
+			s.rangeHandler(path, getWriterWraper(w, compression), start, start+length-1)
 		} else {
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)

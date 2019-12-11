@@ -106,6 +106,15 @@ func lastString(ss []string) string {
 	return ss[len(ss)-1]
 }
 
+// Query data for a single file
+func (mm *MetadataManager) Query(path string) *INode {
+	nodes := mm.load(path)
+	if len(nodes) == 0 || len(nodes) > 1 { // Not a file
+		return nil
+	}
+	return nodes[0]
+}
+
 func NewS3MetadataManager(bucket string) *MetadataManager {
 	mm := new(MetadataManager)
 	mm.rt = NewINode("", true, 0, "")

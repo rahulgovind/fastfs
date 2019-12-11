@@ -41,14 +41,16 @@ type FastFS struct {
 	mlist       *memberlist.Memberlist
 }
 
-func NewFastFS(port int, events memberlist.EventDelegate) *FastFS {
+func NewFastFS(addr string, port int, fsport int, primaryAddr string, events memberlist.EventDelegate) *FastFS {
 	ffs := new(FastFS)
+
+	localAddr := fmt.Sprintf("%v:%v", addr, port)
 
 	config := memberlist.DefaultLocalConfig()
 
 	config.BindPort = port
 	config.AdvertisePort = port
-	config.Name = fmt.Sprintf("localhost:%v", 8081)
+	config.Name = fmt.Sprintf("%v:%v", addr, fsport)
 	config.Events = ffs
 	ffs.Event = events
 
@@ -59,6 +61,9 @@ func NewFastFS(port int, events memberlist.EventDelegate) *FastFS {
 		log.Fatal(err)
 	}
 
+	if primaryAddr != localAddr {
+		list.Join([]string{primaryAddr})
+	}
 	ffs.mlist = list
 
 	return ffs
@@ -72,13 +77,13 @@ func (ffs *FastFS) NotifyJoin(n *memberlist.Node) {
 
 func (ffs *FastFS) NotifyLeave(n *memberlist.Node) {
 	if ffs.Event != nil {
-		ffs.Event.NotifyJoin(n)
+		ffs.Event.NotifyLeave(n)
 	}
 }
 
 func (ffs *FastFS) NotifyUpdate(n *memberlist.Node) {
 	if ffs.Event != nil {
-		ffs.Event.NotifyJoin(n)
+		ffs.Event.NotifyUpdate(n)
 	}
 }
 
