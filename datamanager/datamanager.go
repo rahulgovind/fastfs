@@ -5,34 +5,35 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/golang/groupcache/singleflight"
-	"github.com/rahulgovind/fastfs/cache/hybridcache"
+	"github.com/rahulgovind/fastfs/cache"
 	"github.com/rahulgovind/fastfs/s3"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"strconv"
 	"strings"
 )
 
-func CacheKeyToString(path string, block int) string {
+func CacheKeyToString(path string, block int64) string {
 	return fmt.Sprintf("%v-%v", path, block)
 }
 
-func StringToCacheKey(s string) (string, int) {
+func StringToCacheKey(s string) (string, int64) {
 	idx := strings.LastIndex(s, "-")
 	block, err := strconv.ParseInt(s[idx+1:], 10, 64)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return s[:idx], int(block)
+	return s[:idx], block
 }
 
 type DataManager struct {
-	cache          *hybridcache.HybridCache
+	cache          cache.Cache
 	bucket         string
 	numDownloaders int
 	downloader     *s3manager.Downloader
 	requestCh      chan DownloadElement
 	g              singleflight.Group
-	BlockSize      int
+	BlockSize      int64
 }
 
 type DownloadElement struct {
@@ -41,11 +42,16 @@ type DownloadElement struct {
 }
 
 type BlockGetter interface {
-	Get(string, int) ([]byte, error)
-	GetBlockSize() int
+	Get(string, int64) ([]byte, error)
+	GetBlockSize() int64
 }
 
-func New(bucket string, numDownloaders int, hc *hybridcache.HybridCache, blockSize int) *DataManager {
+type BlockPutter interface {
+	Put(string, int64, []byte) error
+	GetBlockSize() int64
+}
+
+func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64) *DataManager {
 	dm := new(DataManager)
 	dm.cache = hc
 	dm.bucket = bucket
@@ -64,12 +70,12 @@ func (dm *DataManager) Start() {
 }
 
 // Given path and block number download file
-func (dm *DataManager) download(path string, block int) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	fmt.Println("Bucket: ", dm.bucket)
+func (dm *DataManager) download(path string, block int64) ([]byte, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, dm.BlockSize))
+
 	err := s3.DownloadToWriterPartial(dm.bucket, dm.downloader, path, buf,
-		int64(block*dm.BlockSize),
-		int64(dm.BlockSize),
+		block*dm.BlockSize,
+		dm.BlockSize,
 	)
 
 	if err != nil {
@@ -103,8 +109,9 @@ func (dm *DataManager) downloadWorker() {
 	}
 }
 
-func (dm *DataManager) uniqueGet(path string, block int) ([]byte, error) {
+func (dm *DataManager) uniqueGet(path string, block int64) ([]byte, error) {
 	log.Debugf("uniqueGet: %v %v", path, block)
+
 	// In Cache?
 	fLink := CacheKeyToString(path, block)
 	data, ok := dm.cache.Get(fLink)
@@ -119,7 +126,7 @@ func (dm *DataManager) uniqueGet(path string, block int) ([]byte, error) {
 }
 
 // Get deduplicates identical requests
-func (dm *DataManager) Get(path string, block int) ([]byte, error) {
+func (dm *DataManager) Get(path string, block int64) ([]byte, error) {
 	log.Debugf("Get: %v %v", path, block)
 	fLink := CacheKeyToString(path, block)
 	data, err := dm.g.Do(fLink, func() (data interface{}, err error) {
@@ -136,6 +143,21 @@ func (dm *DataManager) Get(path string, block int) ([]byte, error) {
 	return data.([]byte), nil
 }
 
-func (dm *DataManager) GetBlockSize() int {
+func (dm *DataManager) GetBlockSize() int64 {
 	return dm.BlockSize
+}
+
+func (dm *DataManager) Put(path string, block int64, data []byte) error {
+	fLink := CacheKeyToString(path, block)
+	fmt.Println("Adding to cache: ", fLink)
+
+	dm.cache.Add(fLink, data)
+	return nil
+}
+
+func (dm *DataManager) Upload(path string, r io.Reader) {
+	err := s3.PutOjbect(dm.bucket, path, r)
+	if err != nil {
+		log.Error(err)
+	}
 }

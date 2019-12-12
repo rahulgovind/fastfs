@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Server struct {
@@ -39,13 +40,14 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *s3.Metada
 	s.mm = mm
 	s.partitioner = p
 	s.localAddress = fmt.Sprintf("%s:%d", addr, port)
-	s.localClient = NewClient(s.localAddress, dm.BlockSize)
+	s.localClient = NewClient(s.localAddress, dm.BlockSize, dm, p)
 	s.fastfs = fastfs
 	return s
 }
 
 func (s *Server) rangeHandler(path string, w io.WriteCloser, start int64, end int64) {
 
+	startTime := time.Now()
 	if end == -1 {
 		end = math.MaxInt32
 	}
@@ -62,13 +64,15 @@ func (s *Server) rangeHandler(path string, w io.WriteCloser, start int64, end in
 		numThreads = endBlock - startBlock + 1
 	}
 
-	ag := datamanager.NewAggregator(int(numThreads), path, int(start), int(end), s.localClient)
+	ag := datamanager.NewAggregator(int(numThreads), path, start, end, s.localClient)
 	ag.WriteTo(w)
+	elapsed := time.Since(startTime)
+	fmt.Printf("Range download took %v", elapsed)
 }
 
 type FileResponse struct {
 	Filename string
-	FileSize int
+	FileSize int64
 }
 
 type LsResponse struct {
@@ -77,7 +81,7 @@ type LsResponse struct {
 
 type SetupResponse struct {
 	Servers   []string
-	BlockSize int
+	BlockSize int64
 }
 
 func getWriterWraper(w http.ResponseWriter, encoding string) io.WriteCloser {
@@ -121,11 +125,19 @@ func (s *Server) queryHandler(path string, w http.ResponseWriter, start int64, e
 	selectsimd.EvaluateCompareString(raw, colIndices[:r], condition, equal[:(r+63)>>6])
 	bts := selectsimd.ExtractCsv(equal[:(r+63)>>6], raw, rowIndices[:r])
 
-	fmt.Println("Processed query")
+	log.Debug("Processed query")
 
 	if len(bts) > 0 {
 		w.Write(bts)
 	}
+}
+
+func (s *Server) getFileSize(path string) int64 {
+	file := s.mm.Query(path)
+	if file == nil {
+		return -1
+	}
+	return file.FileSize
 }
 
 func (s *Server) handleHead(w http.ResponseWriter, req *http.Request, path string) {
@@ -138,6 +150,7 @@ func (s *Server) handleHead(w http.ResponseWriter, req *http.Request, path strin
 	w.Header().Set("Content-Length", fmt.Sprintf("%v", file.FileSize))
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", "binary/octet-stream")
+	log.Debug("length: ", w.Header().Get("Content-Length"))
 	return
 }
 
@@ -152,17 +165,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		path = query[firstSlash+1:]
 	}
 
-	fmt.Println(req.Method)
 	if req.Method == "HEAD" {
 		s.handleHead(w, req, path)
 		return
 	}
 
-	fmt.Println("Accept-Encoding: ", req.Header.Get("Accept-Encoding"))
+	if req.Method == "PUT" {
+		s.handlePut(w, req, path)
+		return
+	}
 
 	if cmd == "query" {
-		p := req.Header.Get("Range")
-		fmt.Println("Content-Range: ", p)
 		col := req.URL.Query().Get("col")
 		colNum, _ := strconv.ParseInt(col, 10, 64)
 
@@ -172,10 +185,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if cmd == "data" {
+		w.Header().Set("Accept-Ranges", "bytes")
+
 		block := req.URL.Query().Get("block")
 		force := req.URL.Query().Get("force")
-		p := req.Header.Get("Range")
-		fmt.Println("Content-Range: ", p)
+
 		if block == "" {
 			encodingHeader := req.Header.Get("Accept-Encoding")
 			compression := ""
@@ -187,30 +201,46 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			rangeString := req.Header.Get("Range")
+			fmt.Println("Range string: ", rangeString)
 			if rangeString == "" {
 				s.rangeHandler(path, getWriterWraper(w, compression), 0, -1)
 				return
 			}
-			ranges, err := parseRange(rangeString, math.MaxInt64)
-			fmt.Println("ranges: ", ranges)
 
+			//fileSize := s.getFileSize(path)
+			//if fileSize == -1 {
+			//	w.WriteHeader(404)
+			//}
+
+			ranges, err := parseRange(rangeString, 1024)
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				http.Error(w, "Requested Range Not Satisfiable", 416)
 				return
 			}
 			start := ranges[0].start
 			length := ranges[0].length
 
-			w.Header().Set("Content-Range", getRange(start, start+length-1, -1))
+			// Redirect?
+			if force != "1" {
+				target := s.partitioner.GetServer(path, int(start/s.localClient.BlockSize))
+
+				fmt.Println(target, s.localAddress)
+				if target != s.localAddress {
+					// Bye bye
+					http.Redirect(w, req, fmt.Sprintf("http://%s/data/%s?force=1", target, path),
+						http.StatusMovedPermanently)
+					return
+				}
+			}
 			w.WriteHeader(206)
+			fmt.Println("Range parameters: ", start, length)
 			s.rangeHandler(path, getWriterWraper(w, compression), start, start+length-1)
 		} else {
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)
 			target := s.partitioner.GetServer(path, int(blockNum))
 
-			fmt.Println("Target: ", target, "\tCurr: ", s.localAddress)
 			if target != s.localAddress && force != "1" {
 				// Need to redirect :(
 				http.Redirect(w, req, fmt.Sprintf("http://%s/data/%s?block=%d&force=1", target, path, blockNum),
@@ -222,7 +252,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				log.Error(err)
 			}
 
-			data, err := s.dm.Get(path, int(blockNum))
+			data, err := s.dm.Get(path, blockNum)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -230,13 +260,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	} else if cmd == "ls" {
-		fmt.Println(path)
 		nodes := s.mm.Stat(path)
 		var output LsResponse
 		for _, node := range nodes {
+			fileSize := int64(-1)
+			if !node.IsDir {
+				fileSize = node.FileSize
+			}
 			output.Files = append(output.Files, FileResponse{
 				Filename: node.Key,
-				FileSize: int(node.FileSize),
+				FileSize: fileSize,
 			})
 		}
 
@@ -255,6 +288,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(404)
 	return
+}
+
+func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string) {
+	block := req.URL.Query().Get("block")
+	if block != "" {
+		log.Info("Receiving put request to cache")
+		blockNum, err := strconv.ParseInt(block, 10, 32)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(500)
+		}
+		buf := bytes.NewBuffer(nil)
+		io.Copy(buf, req.Body)
+		s.dm.Put(path, blockNum, buf.Bytes())
+		return
+	}
+
+	log.Info("Received PUT request for ", path)
+	reader, writer := io.Pipe()
+
+	rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
+
+	go s.dm.Upload(path, reader)
+	rag.ReadFrom(req.Body)
+
+	req.Body.Close()
+
+	log.Info("Done copying data")
 }
 
 func (s *Server) Serve() {

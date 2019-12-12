@@ -3,24 +3,25 @@ package datamanager
 import (
 	log "github.com/sirupsen/logrus"
 	"io"
+	"sync"
 	"time"
 )
 
 type BlockData struct {
 	data  []byte
-	block int
+	block int64
 }
 
 type Aggregator struct {
 	path        string
 	numParallel int
-	start       int
-	end         int
+	start       int64
+	end         int64
 	getter      BlockGetter
 }
 
 func NewAggregator(numParallel int, path string,
-	start int, end int,
+	start int64, end int64,
 	getter BlockGetter) *Aggregator {
 	res := new(Aggregator)
 	res.getter = getter
@@ -34,7 +35,7 @@ func NewAggregator(numParallel int, path string,
 	return res
 }
 
-func (ag *Aggregator) downloadBlock(blockCh chan int, out chan *BlockData) {
+func (ag *Aggregator) downloadBlock(blockCh chan int64, out chan *BlockData) {
 	for {
 		block := <-blockCh
 
@@ -65,9 +66,9 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 	nextBlock := startBlock
 	nextDownload := startBlock
 	stop := false
-	blocks := make(map[int]*BlockData)
+	blocks := make(map[int64]*BlockData)
 
-	d := make(chan int, ag.numParallel)
+	d := make(chan int64, ag.numParallel)
 	out := make(chan *BlockData, ag.numParallel)
 
 	for i := 0; i < ag.numParallel; i++ {
@@ -108,8 +109,8 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 
 			//log.Infof("Added %v Length: %v", nextDownload, len(bdNext.data))
 
-			startOffHere := 0
-			endOffHere := len(bdNext.data)
+			startOffHere := int64(0)
+			endOffHere := int64(len(bdNext.data))
 
 			if bdNext.block == startBlock {
 				startOffHere = startOff
@@ -147,8 +148,8 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 			blocks[bd.block] = bd
 			continue
 		}
-		startOffHere := 0
-		endOffHere := len(bdNext.data)
+		startOffHere := int64(0)
+		endOffHere := int64(len(bdNext.data))
 
 		if bdNext.block == startBlock {
 			startOffHere = startOff
@@ -186,4 +187,92 @@ func (f *FakeWriteCloser) Write(b []byte) (int, error) {
 
 func (f *FakeWriteCloser) Close() error {
 	return nil
+}
+
+type ReverseAggregator struct {
+	path        string
+	putter      BlockPutter
+	writer      io.WriteCloser
+	numParallel int
+}
+
+func NewReverseAggregator(path string, putter BlockPutter, writer io.WriteCloser, numParallel int) *ReverseAggregator {
+	rag := new(ReverseAggregator)
+	rag.path = path
+	rag.putter = putter
+	rag.writer = writer
+	rag.numParallel = numParallel
+
+	return rag
+}
+
+func (rag *ReverseAggregator) uploadBlock(blockCh chan *BlockData, bufChan chan []byte) {
+	for {
+		blockData := <-blockCh
+
+		//log.Debugf("look-ahead %v", block)
+		if blockData == nil {
+			break
+		}
+
+		log.Debug("Caching block ", blockData.block)
+		err := rag.putter.Put(rag.path, blockData.block, blockData.data)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		bufChan <- blockData.data
+	}
+}
+
+type SharedBuffer struct {
+	mu   sync.Mutex
+	data [][]byte
+}
+
+func (rag *ReverseAggregator) ReadFrom(reader io.ReadCloser) {
+	log.Debug("Starting read from")
+	blockSize := rag.putter.GetBlockSize()
+
+	blockChan := make(chan *BlockData, rag.numParallel)
+
+	nextUpload := int64(0)
+	bufChan := make(chan []byte, rag.numParallel)
+
+	for i := 0; i < rag.numParallel; i++ {
+		bufChan <- make([]byte, blockSize)
+		go rag.uploadBlock(blockChan, bufChan)
+	}
+
+	for {
+		buf := <-bufChan
+		buf = buf[:cap(buf)]
+
+		log.Debug("Reading block ", nextUpload)
+
+		n, readErr := io.ReadAtLeast(reader, buf, len(buf))
+		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+			log.Fatal(readErr)
+		}
+
+		log.Debug("Done reading. Writing now.", nextUpload)
+		_, err := rag.writer.Write(buf[:n])
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		blockChan <- &BlockData{buf[:n], nextUpload}
+		nextUpload += 1
+		if readErr == io.EOF {
+			break
+		}
+	}
+
+	log.Info("Done")
+	for i := 0; i < rag.numParallel; i++ {
+		blockChan <- nil
+	}
+
+	log.Info("Exit")
+	reader.Close()
 }

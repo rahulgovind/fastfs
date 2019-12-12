@@ -46,6 +46,7 @@ func (mm *MetadataManager) GetRoot() *INode {
 }
 
 func (mm *MetadataManager) loadAt(inode *INode) {
+	fmt.Println("Calling loatAt ", inode.Key)
 	if inode != nil && inode.IsDir && !inode.isLoaded {
 		inodes := mm.load(inode.fLink)
 		for _, inode2 := range inodes {
@@ -58,12 +59,16 @@ func (mm *MetadataManager) loadAt(inode *INode) {
 func (mm *MetadataManager) Stat(path string) []*INode {
 	path = strings.TrimSuffix(path, "/")
 	keys := strings.Split(path, "/")
-	keys = keys[1:]
+	if len(keys) > 0 && keys[0] == "" {
+		keys = keys[1:]
+	}
+	fmt.Println(path)
 
 	node := mm.rt
 	mm.loadAt(node)
 
 	for _, key := range keys {
+		fmt.Println("Key: ", key)
 		node2, ok := node.Children[key]
 		if !ok || !node2.IsDir {
 			return nil

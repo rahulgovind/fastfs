@@ -156,10 +156,13 @@ func (fw *FakeWriterAt) WriteAt(p []byte, offset int64) (n int, err error) {
 }
 
 func GetDownloader() *s3manager.Downloader {
+	startTime := time.Now()
 	sess, _ := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2")},
 	)
 	downloader := s3manager.NewDownloader(sess)
+	elasped := time.Since(startTime)
+	fmt.Println("Creating throughput took :", elasped)
 	return downloader
 }
 
@@ -297,6 +300,25 @@ func DeleteObject(bucket string, key string) error {
 	}
 
 	log.Info(result)
+	return nil
+}
+
+func PutOjbect(bucket string, path string, r io.Reader) error {
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-2"),
+	})
+	uploader := s3manager.NewUploader(sess)
+
+	result, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(path),
+		Body:   r,
+		ACL:    aws.String("public-read"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload file, %v", err)
+	}
+	fmt.Printf("file uploaded to, %s\n", result.Location)
 	return nil
 }
 

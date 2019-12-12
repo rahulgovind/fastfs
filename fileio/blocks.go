@@ -3,7 +3,7 @@ package fileio
 import (
 	"errors"
 	"github.com/golang-collections/go-datastructures/queue"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"sync"
 	"time"
 )
@@ -45,7 +45,7 @@ func NewBlockManager(filename string, numBlocks int, blockSize int, iotype int) 
 	} else if iotype == FileInterface {
 		bm.io = NewDirectFileIO(filename, blockSize*numBlocks)
 	} else {
-		logrus.Fatal("Invalid IO Type")
+		log.Fatal("Invalid IO Type")
 	}
 
 	bm.freeList = queue.New(int64(numBlocks))
@@ -85,7 +85,7 @@ func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
 		bm.io.WriteAt(offset, block.data)
 		elapsed := time.Since(startTime)
 		if false {
-			logrus.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
+			log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
 		}
 		block.mu.Lock()
 		block.data = nil
@@ -93,7 +93,7 @@ func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
 		block.mu.Unlock()
 	}()
 
-	//logrus.Debug("Created block ", idx)
+	//log.Debug("Created block ", idx)
 	return idx, nil
 }
 

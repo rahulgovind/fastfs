@@ -60,8 +60,8 @@ func (mc *MemCache) Add(key string, value []byte) {
 
 // Get looks up a key's value from the cache.
 func (mc *MemCache) Get(key string) (value []byte, ok bool) {
-	mc.mu.RLock()
-	defer mc.mu.RUnlock()
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
 	if mc.cache == nil {
 		return
 	}

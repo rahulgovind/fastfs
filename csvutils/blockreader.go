@@ -2,8 +2,8 @@ package csvutils
 
 import "bytes"
 
-func AlignedSlices(raw []byte, startSkip bool, blockSize int) []byte {
-	startOffset := 0
+func AlignedSlices(raw []byte, startSkip bool, blockSize int64) []byte {
+	startOffset := int64(0)
 
 	if startSkip {
 		startOffset := bytes.LastIndex(raw[:blockSize], []byte{0x0a})
@@ -12,15 +12,15 @@ func AlignedSlices(raw []byte, startSkip bool, blockSize int) []byte {
 		}
 	}
 	skipOffset := startOffset
-	if len(raw)-blockSize > skipOffset {
-		skipOffset = len(raw) - blockSize
+	if int64(len(raw))-blockSize > skipOffset {
+		skipOffset = int64(len(raw)) - blockSize
 	}
 
 	lastIndex := bytes.LastIndex(raw[skipOffset:], []byte{0x0a})
 	if lastIndex == -1 {
 		return []byte{}
 	}
-	return raw[startOffset : skipOffset+lastIndex]
+	return raw[startOffset : skipOffset+int64(lastIndex)]
 }
 
 //

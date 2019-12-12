@@ -1,6 +1,7 @@
 package hybridcache
 
 import (
+	"github.com/rahulgovind/fastfs/cache"
 	"github.com/rahulgovind/fastfs/cache/diskcache"
 	"github.com/rahulgovind/fastfs/cache/memcache"
 	log "github.com/sirupsen/logrus"
@@ -8,15 +9,25 @@ import (
 
 type HybridCache struct {
 	mc *memcache.MemCache
-	dc *diskcache.DiskCache
+	dc cache.Cache
 }
 
-func NewHybridCache(maxMemEntries int, maxDiskEntries int, blockSize int, filename string, iotype int) *HybridCache {
+func NewHybridCache(maxMemEntries int, dc cache.Cache) *HybridCache {
+	hc := new(HybridCache)
+	hc.mc = memcache.NewMemCache(maxMemEntries)
+	hc.dc = dc
+	hc.mc.OnEvicted = hc.handleMemEvict
+	return hc
+}
+
+func NewMemDiskHybridCache(maxMemEntries int, maxDiskEntries int, blockSize int,
+	filename string, iotype int) *HybridCache {
 	hc := new(HybridCache)
 	hc.mc = memcache.NewMemCache(maxMemEntries)
 	hc.dc = diskcache.NewDiskCache(maxDiskEntries, blockSize, filename, iotype)
 	hc.mc.OnEvicted = hc.handleMemEvict
 	return hc
+
 }
 
 func (hc *HybridCache) handleMemEvict(key string, value []byte) {

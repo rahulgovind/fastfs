@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"os"
+	"runtime/debug"
 )
 
 func main() {
@@ -71,11 +72,18 @@ func main() {
 		fsPort = port + 100
 	}
 
-	hc := hybridcache.NewHybridCache(64 , 512 , 1024*1024, "testdata",
-		fileio.FileInterface)
-	dm := datamanager.New(bucket, 16, hc, 1024*1024)
+	log.SetLevel(log.ErrorLevel)
+	hc := hybridcache.NewMemDiskHybridCache(128, 512, 1024*1024,
+		"testdata", fileio.FileInterface)
+	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
+	//c.Clear()
+	//hc := hybridcache.NewHybridCache(128, c)
+
+	dm := datamanager.New(bucket, 8, hc, 1024*1024)
+
 	mm := s3.NewS3MetadataManager(bucket)
 	partitioner := NewHashPartitioner()
+	debug.SetGCPercent(80)
 	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), partitioner)
 
 	//config := memberlist.DefaultLocalConfig()
