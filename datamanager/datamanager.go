@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/golang/groupcache/singleflight"
 	"github.com/rahulgovind/fastfs/cache"
+	"github.com/rahulgovind/fastfs/metadatamanager"
 	"github.com/rahulgovind/fastfs/s3"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -34,6 +35,8 @@ type DataManager struct {
 	requestCh      chan DownloadElement
 	g              singleflight.Group
 	BlockSize      int64
+	ServerAddr     string
+	mm             *metadatamanager.MetadataManager
 }
 
 type DownloadElement struct {
@@ -51,7 +54,8 @@ type BlockPutter interface {
 	GetBlockSize() int64
 }
 
-func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64) *DataManager {
+func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
+	serverAddr string, mm *metadatamanager.MetadataManager) *DataManager {
 	dm := new(DataManager)
 	dm.cache = hc
 	dm.bucket = bucket
@@ -59,6 +63,8 @@ func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64) *Da
 	dm.downloader = s3.GetDownloader()
 	dm.BlockSize = blockSize
 	dm.requestCh = make(chan DownloadElement, 1024)
+	dm.ServerAddr = serverAddr
+	dm.mm = mm
 	dm.Start()
 	return dm
 }
@@ -109,6 +115,16 @@ func (dm *DataManager) downloadWorker() {
 	}
 }
 
+func (dm *DataManager) CacheGet(path string, block int64) ([]byte, bool) {
+	fLink := CacheKeyToString(path, block)
+	return dm.cache.Get(fLink)
+}
+
+func (dm *DataManager) CacheDelete(path string, block int64) {
+	fLink := CacheKeyToString(path, block)
+	dm.cache.Remove(fLink)
+}
+
 func (dm *DataManager) uniqueGet(path string, block int64) ([]byte, error) {
 	log.Debugf("uniqueGet: %v %v", path, block)
 
@@ -120,6 +136,10 @@ func (dm *DataManager) uniqueGet(path string, block int64) ([]byte, error) {
 		ch := make(chan []byte, 1)
 		dm.requestCh <- DownloadElement{fLink, ch}
 		data = <-ch
+
+		if dm.mm != nil {
+			dm.mm.SetLocation(path, block, dm.ServerAddr)
+		}
 		dm.cache.Add(fLink, data)
 	}
 	return data, nil
@@ -147,16 +167,56 @@ func (dm *DataManager) GetBlockSize() int64 {
 	return dm.BlockSize
 }
 
-func (dm *DataManager) Put(path string, block int64, data []byte) error {
+func (dm *DataManager) CachePut(path string, block int64, data []byte) error {
 	fLink := CacheKeyToString(path, block)
 	fmt.Println("Adding to cache: ", fLink)
 
+	if dm.mm != nil {
+		dm.mm.SetLocation(path, block, dm.ServerAddr)
+	}
 	dm.cache.Add(fLink, data)
+
 	return nil
 }
 
-func (dm *DataManager) Upload(path string, r io.Reader) {
-	err := s3.PutOjbect(dm.bucket, path, r)
+type CountingReader struct {
+	r io.ReadCloser
+	size int64
+}
+
+func (cr *CountingReader) Read(b []byte) (int, error) {
+	n, err := cr.r.Read(b)
+	cr.size += int64(n)
+	return n, err
+}
+
+func (cr *CountingReader) Close() error {
+	return cr.r.Close()
+}
+
+func (cr *CountingReader) Size() int64 {
+	return cr.size
+}
+
+func (dm *DataManager) Upload(path string, r io.ReadCloser) {
+	cr := &CountingReader{r, 0}
+	err := s3.PutOjbect(dm.bucket, path, cr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if dm.mm != nil {
+		lastIndex := strings.LastIndex(path, "/")
+		dir := ""
+		if lastIndex != -1 {
+			dir = path[:lastIndex + 1]
+		}
+		dm.mm.AddToList(dir, path, cr.Size())
+		log.Infof("Adding to metadata: Dir:%s\tFile:%s\tSize: %d", dir, path, cr.Size())
+	}
+}
+
+func (dm *DataManager) Delete(path string) {
+	err := s3.DeleteObject(dm.bucket, path)
 	if err != nil {
 		log.Error(err)
 	}

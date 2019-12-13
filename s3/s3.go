@@ -112,6 +112,7 @@ func ListNodes(bucket string, path string) []S3Node {
 			IsDirectory: false,
 		})
 	}
+	fmt.Println(result)
 	return result
 }
 
@@ -315,10 +316,13 @@ func PutOjbect(bucket string, path string, r io.Reader) error {
 		Body:   r,
 		ACL:    aws.String("public-read"),
 	})
+
 	if err != nil {
+		log.Fatal(err)
 		return fmt.Errorf("failed to upload file, %v", err)
 	}
 	fmt.Printf("file uploaded to, %s\n", result.Location)
+
 	return nil
 }
 

@@ -9,7 +9,7 @@ import (
 	"github.com/minio/select-simd"
 	"github.com/rahulgovind/fastfs/csvutils"
 	"github.com/rahulgovind/fastfs/datamanager"
-	"github.com/rahulgovind/fastfs/s3"
+	"github.com/rahulgovind/fastfs/metadatamanager"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"math"
@@ -24,14 +24,14 @@ type Server struct {
 	port         int
 	blockHandler func(path string, block int, w io.Writer)
 	dm           *datamanager.DataManager
-	mm           *s3.MetadataManager
+	mm           *metadatamanager.MetadataManager
 	partitioner  Partitioner
 	localClient  *Client
 	localAddress string
 	fastfs       *FastFS
 }
 
-func NewServer(addr string, port int, dm *datamanager.DataManager, mm *s3.MetadataManager, p Partitioner,
+func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatamanager.MetadataManager, p Partitioner,
 	fastfs *FastFS) *Server {
 	s := new(Server)
 	s.addr = addr
@@ -133,21 +133,21 @@ func (s *Server) queryHandler(path string, w http.ResponseWriter, start int64, e
 }
 
 func (s *Server) getFileSize(path string) int64 {
-	file := s.mm.Query(path)
-	if file == nil {
+	file, err := s.mm.Query(path)
+	if err == metadatamanager.FileNotFoundError {
 		return -1
 	}
-	return file.FileSize
+	return file.Size
 }
 
 func (s *Server) handleHead(w http.ResponseWriter, req *http.Request, path string) {
-	file := s.mm.Query(path)
-	if file == nil {
+	file, err := s.mm.Query(path)
+	if err == metadatamanager.FileNotFoundError {
 		w.WriteHeader(404)
 		return
 	}
 
-	w.Header().Set("Content-Length", fmt.Sprintf("%v", file.FileSize))
+	w.Header().Set("Content-Length", fmt.Sprintf("%v", file.Size))
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Type", "binary/octet-stream")
 	log.Debug("length: ", w.Header().Get("Content-Length"))
@@ -172,6 +172,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if req.Method == "PUT" {
 		s.handlePut(w, req, path)
+		return
+	}
+
+	if req.Method == "DELETE" {
+		s.handleDelete(w, req, path)
 		return
 	}
 
@@ -204,6 +209,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			fmt.Println("Range string: ", rangeString)
 			if rangeString == "" {
 				s.rangeHandler(path, getWriterWraper(w, compression), 0, -1)
+				log.Error("Done writing")
 				return
 			}
 
@@ -212,7 +218,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			//	w.WriteHeader(404)
 			//}
 
-			ranges, err := parseRange(rangeString, 1024)
+			ranges, err := parseRange(rangeString, math.MaxInt64>>3)
 			if err != nil {
 				log.Error(err)
 				http.Error(w, "Requested Range Not Satisfiable", 416)
@@ -239,41 +245,63 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		} else {
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)
-			target := s.partitioner.GetServer(path, int(blockNum))
+			if force != "1" {
+				target := s.partitioner.GetServer(path, int(blockNum))
 
-			if target != s.localAddress && force != "1" {
-				// Need to redirect :(
-				http.Redirect(w, req, fmt.Sprintf("http://%s/data/%s?block=%d&force=1", target, path, blockNum),
-					http.StatusMovedPermanently)
+				if s.localAddress != target {
+					req.URL.Host = target
+					http.Redirect(w, req, req.URL.String(), http.StatusMovedPermanently)
+					return
+				}
+			}
+			onlyCache := req.URL.Query().Get("onlyCache") == "true"
+
+			data, ok := s.dm.CacheGet(path, blockNum)
+
+			if ok {
+				w.Write(data)
+				if onlyCache {
+					s.dm.CacheDelete(path, blockNum)
+				}
 				return
 			}
 
-			if err != nil {
-				log.Error(err)
+			if onlyCache {
+				w.WriteHeader(404)
+				return
 			}
 
-			data, err := s.dm.Get(path, blockNum)
+			// Nope. I don't this data. Let's ask the metadata registry if someone else has a copy
+			candidate, ok := s.mm.QueryLocation(path, blockNum)
+
+			// If I am the candidate then it looks like a parallel request went thorugh
+			// or I have deleted the file. Either way, download again.
+			if ok && candidate != s.localAddress {
+				log.Error("I don't have block but looks like someone else might")
+				// Someone else probably has a copy. Fetch it and ask them to delete it.
+				data, err = s.localClient.DirectGet(path, blockNum, candidate, true)
+				if err == nil {
+					log.Error("Started copying\t", blockNum)
+					s.dm.CachePut(path, blockNum, data)
+					w.Write(data)
+					log.Error("Done writing\t", blockNum)
+					return
+				}
+			}
+
+			// No one else has it. Just fetch it from S3 lol
+			data, err = s.dm.Get(path, blockNum)
 			if err != nil {
 				log.Fatal(err)
 			}
+			fmt.Println("Writing data block")
 			w.Write(data)
+			fmt.Println("Done writing block")
 		}
 		return
 	} else if cmd == "ls" {
-		nodes := s.mm.Stat(path)
-		var output LsResponse
-		for _, node := range nodes {
-			fileSize := int64(-1)
-			if !node.IsDir {
-				fileSize = node.FileSize
-			}
-			output.Files = append(output.Files, FileResponse{
-				Filename: node.Key,
-				FileSize: fileSize,
-			})
-		}
-
-		res, _ := json.Marshal(output)
+		fl, _ := s.mm.GetList(path)
+		res, _ := json.Marshal(fl)
 		w.Write(res)
 		return
 	} else if cmd == "setup" {
@@ -301,21 +329,30 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 		}
 		buf := bytes.NewBuffer(nil)
 		io.Copy(buf, req.Body)
-		s.dm.Put(path, blockNum, buf.Bytes())
+		s.dm.CachePut(path, blockNum, buf.Bytes())
 		return
 	}
 
 	log.Info("Received PUT request for ", path)
-	reader, writer := io.Pipe()
-
-	rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
-
-	go s.dm.Upload(path, reader)
-	rag.ReadFrom(req.Body)
-
+	s.dm.Upload(path, req.Body)
 	req.Body.Close()
+	//reader, writer := io.Pipe()
+	//
+	//rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
+	//
+	//go s.dm.Upload(path, reader)
+	//rag.ReadFrom(req.Body)
+	//
+	//writer.Close()
+	//reader.Close()
+	//req.Body.Close()
 
 	log.Info("Done copying data")
+}
+
+func (s *Server) handleDelete(w http.ResponseWriter, req *http.Request, path string) {
+	log.Info("Deleting ", path)
+	s.dm.Delete(path)
 }
 
 func (s *Server) Serve() {

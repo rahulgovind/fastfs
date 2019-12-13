@@ -5,14 +5,17 @@ import (
 	"github.com/rahulgovind/fastfs/cache/hybridcache"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/fileio"
-	"github.com/rahulgovind/fastfs/s3"
+	"github.com/rahulgovind/fastfs/metadatamanager"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"os"
 	"runtime/debug"
 )
 
+
 func main() {
+	log.SetReportCaller(true)
+
 	//defer profile.Start(profile.MemProfile).Stop()
 	var bucket string
 	var port int
@@ -20,6 +23,7 @@ func main() {
 	addr := "localhost"
 	var primaryAddr string
 	var primaryPort int
+	var redisAddr string
 
 	log.SetLevel(log.DebugLevel)
 	app := cli.NewApp()
@@ -61,6 +65,12 @@ func main() {
 			Destination: &primaryPort,
 			Value:       8000,
 		},
+		&cli.StringFlag{
+			Name:        "redis-addr",
+			Usage:       "Address of redis server",
+			Destination: &redisAddr,
+			Value:       "localhost:6379",
+		},
 	}
 
 	err := app.Run(os.Args)
@@ -72,16 +82,19 @@ func main() {
 		fsPort = port + 100
 	}
 
-	log.SetLevel(log.ErrorLevel)
+	//log.SetLevel(log.ErrorLevel)
 	hc := hybridcache.NewMemDiskHybridCache(128, 512, 1024*1024,
 		"testdata", fileio.FileInterface)
 	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
 	//c.Clear()
-	//hc := hybridcache.NewHybridCache(128, c)
+	//c := badgercache.NewBadgerCache()
+	//hc := hybridcache.NewHybridCache(32, c)
 
-	dm := datamanager.New(bucket, 8, hc, 1024*1024)
+	serverAddr := fmt.Sprintf("%v:%v", addr, fsPort)
+	isPrimary := port == primaryPort && addr == primaryAddr
+	mm := metadatamanager.NewMetadataManager(redisAddr, bucket, isPrimary)
+	dm := datamanager.New(bucket, 8, hc, 1024*1024, serverAddr, mm)
 
-	mm := s3.NewS3MetadataManager(bucket)
 	partitioner := NewHashPartitioner()
 	debug.SetGCPercent(80)
 	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), partitioner)

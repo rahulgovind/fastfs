@@ -37,9 +37,12 @@ func main() {
 		log.Fatal("Please enter a valid URL")
 	}
 
-	makeRequest(url)
 	start := time.Now()
 	makeRequest(url)
 	elapsed := time.Since(start)
-	fmt.Printf("Took %v to download 1K", elapsed)
+	fmt.Printf("%v to download 1K (Request 1)\n", elapsed)
+	start = time.Now()
+	makeRequest(url)
+	elapsed = time.Since(start)
+	fmt.Printf("%v to download 1K (Request 2)", elapsed)
 }

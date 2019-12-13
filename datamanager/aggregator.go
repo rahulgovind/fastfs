@@ -263,7 +263,7 @@ func (rag *ReverseAggregator) ReadFrom(reader io.ReadCloser) {
 
 		blockChan <- &BlockData{buf[:n], nextUpload}
 		nextUpload += 1
-		if readErr == io.EOF {
+		if readErr == io.EOF  {
 			break
 		}
 	}
@@ -274,5 +274,6 @@ func (rag *ReverseAggregator) ReadFrom(reader io.ReadCloser) {
 	}
 
 	log.Info("Exit")
+	rag.writer.Close()
 	reader.Close()
 }

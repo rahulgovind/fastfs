@@ -54,7 +54,7 @@ func NewBlockManager(filename string, numBlocks int, blockSize int, iotype int) 
 	return bm
 }
 
-// Put byte array data. Truncated to blockSize
+// CachePut byte array data. Truncated to blockSize
 func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
 
 	bm.mu.Lock()

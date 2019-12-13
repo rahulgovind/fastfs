@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"errors"
 )
 
 type Client struct {
@@ -30,9 +31,53 @@ func (c *Client) GetBlockSize() int64 {
 	return c.BlockSize
 }
 
-func (c *Client) Get(path string, block int64) ([]byte, error) {
+func (c *Client) DirectGet(path string, block int64, addr string, cache bool) ([]byte, error) {
+	for {
+		url := fmt.Sprintf("http://%s/data/%s?block=%d&force=1&cache=%v",
+			addr, path, block, cache)
+
+		maxRetries := 3
+		numRetries := 0
+		var buffer *bytes.Buffer
+
+		resp, err := http.Get(url)
+
+
+		if err != nil {
+			log.Fatal(err)
+			numRetries += 1
+			if numRetries <= maxRetries {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			log.Fatal(err)
+			return nil, err
+		}
+
+		if resp.StatusCode == 404 {
+			return nil, errors.New("file not found")
+		}
+
+		defer resp.Body.Close()
+		buffer = new(bytes.Buffer)
+		_, err = io.Copy(buffer, resp.Body)
+		if err != nil {
+			numRetries += 1
+			if numRetries <= maxRetries {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, err
+		}
+
+		return buffer.Bytes(), nil
+	}
+}
+
+func (c *Client) Get(path string, block int64, ) ([]byte, error) {
 	for {
 		addr := c.partitioner.GetServer(path, int(block))
+
 		if addr == c.ServerAddr {
 			return c.dm.Get(path, block)
 		}

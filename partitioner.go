@@ -8,7 +8,7 @@ import (
 )
 
 // Partitioner has one job:
-// Given a file and block number where should we fetch the file from?
+// Given a file and block number where should the file ideally be stored?
 type Partitioner interface {
 	GetServer(path string, block int) string
 	NotifyJoin(n *memberlist.Node)

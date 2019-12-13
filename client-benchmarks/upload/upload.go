@@ -3,44 +3,40 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/rahulgovind/fastfs/helpers"
 	"github.com/rahulgovind/fastfs/s3"
+	"io"
 	"log"
-	"net/http"
 	"os"
 	"time"
 )
 
 func main() {
-	var dstFlag = flag.String("dst", "uploaded_file.out", "Desination filename")
-	var filenameFlag = flag.String("src", "parking-citations-500k.csv", "Source file")
-
+	var dstFlag = flag.String("dst", "uploaded_file4.out", "Desination filename")
+	var filenameFlag = flag.String("src", "parking-citations-50k.csv", "Source file")
+	var addrFlag = flag.String("addr", "127.0.0.1:8100", "Server address")
 	flag.Parse()
-	dst := *dstFlag
+
 	filename := *filenameFlag
 
 	data, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	//defer data.Close()
 	fi, _ := data.Stat()
 	fileSize := fi.Size()
 
-	defer data.Close()
+	client := helpers.New(*addrFlag, 16, 16)
+	writer, _ := client.OpenWriter(*dstFlag)
 
 	startTime := time.Now()
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:8100/put/%v", dst), data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "text/plain")
 
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
+	io.Copy(writer, data)
+	data.Close()
+	writer.Close()
+
 	elapsed := time.Since(startTime)
 	fmt.Printf("Tokk %v seconds\tSize: %v\tSpeed: %v", elapsed, fileSize, s3.ByteSpeed(fileSize, elapsed))
-	defer res.Body.Close()
+
 }
