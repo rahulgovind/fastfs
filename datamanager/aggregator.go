@@ -174,7 +174,7 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 	for i := 0; i < ag.numParallel; i += 1 {
 		d <- -1
 	}
-	w.Close()
+	//w.Close()
 }
 
 type FakeWriteCloser struct {

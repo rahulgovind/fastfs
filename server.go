@@ -195,20 +195,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		block := req.URL.Query().Get("block")
 		force := req.URL.Query().Get("force")
 
+		// Compressiong
+		dataWriter := s.getCompressionWriter(w, req)
+		defer dataWriter.Close()
+
 		if block == "" {
-			encodingHeader := req.Header.Get("Accept-Encoding")
-			compression := ""
-
-			if strings.Contains(encodingHeader, "gzip") {
-				compression = "gzip"
-			} else if strings.Contains(encodingHeader, "deflate") {
-				compression = "deflate"
-			}
-
 			rangeString := req.Header.Get("Range")
 			fmt.Println("Range string: ", rangeString)
 			if rangeString == "" {
-				s.rangeHandler(path, getWriterWraper(w, compression), 0, -1)
+				s.rangeHandler(path, dataWriter, 0, -1)
 				log.Error("Done writing")
 				return
 			}
@@ -241,7 +236,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 			w.WriteHeader(206)
 			fmt.Println("Range parameters: ", start, length)
-			s.rangeHandler(path, getWriterWraper(w, compression), start, start+length-1)
+			s.rangeHandler(path, dataWriter, start, start+length-1)
 		} else {
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)
@@ -259,7 +254,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			data, ok := s.dm.CacheGet(path, blockNum)
 
 			if ok {
-				w.Write(data)
+				dataWriter.Write(data)
+
 				if onlyCache {
 					s.dm.CacheDelete(path, blockNum)
 				}
@@ -283,7 +279,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if err == nil {
 					log.Error("Started copying\t", blockNum)
 					s.dm.CachePut(path, blockNum, data)
-					w.Write(data)
+					dataWriter.Write(data)
+
 					log.Error("Done writing\t", blockNum)
 					return
 				}
@@ -295,7 +292,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				log.Fatal(err)
 			}
 			fmt.Println("Writing data block")
-			w.Write(data)
+			dataWriter.Write(data)
 			fmt.Println("Done writing block")
 		}
 		return
@@ -360,4 +357,15 @@ func (s *Server) Serve() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (s *Server) getCompressionWriter(w http.ResponseWriter, req *http.Request) io.WriteCloser {
+	compression := ""
+	encodingHeader := req.Header.Get("Accept-Encoding")
+	if strings.Contains(encodingHeader, "gzip") {
+		compression = "gzip"
+	} else if strings.Contains(encodingHeader, "deflate") {
+		compression = "deflate"
+	}
+	return getWriterWraper(w, compression)
 }
