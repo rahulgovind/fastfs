@@ -80,7 +80,7 @@ func (mm *MetadataManager) queryServer(filepath string) (common.FileInfo, error)
 		return result, err
 	}
 
-	go mm.centralServer.Set(filepath, fmt.Sprintf("%v", result.Size))
+	mm.centralServer.Set(filepath, fmt.Sprintf("%v", result.Size))
 	return result, err
 }
 

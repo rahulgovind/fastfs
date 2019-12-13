@@ -10,7 +10,7 @@ import (
 type DiskCache struct {
 	// MaxEntries is the maximum number of cache entries before
 	// an item is evicted. Zero means no limit.
-	MaxEntries int
+	MaxEntries int64
 
 	// OnEvicted optionally specifies a callback function to be
 	// executed when an entry is purged from the cache.
@@ -18,7 +18,7 @@ type DiskCache struct {
 
 	ll        *list.List
 	cache     map[interface{}]*list.Element
-	blockSize int
+	blockSize int64
 	bm        *fileio.BlockManager
 
 	mu sync.RWMutex
@@ -29,14 +29,14 @@ type Key interface{}
 
 type entry struct {
 	key     string
-	blockId int
-	length  int
+	blockId int64
+	length  int64
 }
 
 // NewDiskCache creates a new DiskCache.
 // If maxEntries is zero, the cache has no limit and it's assumed
 // that eviction is done by the caller.
-func NewDiskCache(maxEntries int, blockSize int, filename string, iotype int) *DiskCache {
+func NewDiskCache(maxEntries int64, blockSize int64, filename string, iotype int) *DiskCache {
 	return &DiskCache{
 		MaxEntries: maxEntries,
 		ll:         list.New(),
@@ -62,10 +62,10 @@ func (c *DiskCache) Add(key string, value []byte) {
 	}
 
 	blockId, _ := c.bm.Put(value)
-	ele := c.ll.PushFront(&entry{key, blockId, len(value)})
+	ele := c.ll.PushFront(&entry{key, blockId, int64(len(value))})
 
 	c.cache[key] = ele
-	if c.MaxEntries != 0 && c.ll.Len() > c.MaxEntries {
+	if c.MaxEntries != 0 && int64(c.ll.Len()) > c.MaxEntries {
 		c.RemoveOldest()
 	}
 }
@@ -125,14 +125,14 @@ func (c *DiskCache) removeElement(e *list.Element) {
 }
 
 // Len returns the number of items in the cache.
-func (c *DiskCache) Len() int {
+func (c *DiskCache) Len() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	if c.cache == nil {
 		return 0
 	}
-	return c.ll.Len()
+	return int64(c.ll.Len())
 }
 
 // Clear purges all stored items from the cache.

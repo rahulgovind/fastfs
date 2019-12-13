@@ -9,7 +9,7 @@ import (
 type MemCache struct {
 	// MaxEntries is the maximum number of cache entries before
 	// an item is evicted. Zero means no limit.
-	MaxEntries int
+	MaxEntries int64
 
 	// OnEvicted optionally specifies a callback function to be
 	// executed when an entry is purged from the cache.
@@ -29,7 +29,7 @@ type entry struct {
 // NewMemCache creates a new MemCache.
 // If maxEntries is zero, the cache has no limit and it's assumed
 // that eviction is done by the caller.
-func NewMemCache(maxEntries int) *MemCache {
+func NewMemCache(maxEntries int64) *MemCache {
 	return &MemCache{
 		MaxEntries: maxEntries,
 		ll:         list.New(),
@@ -53,7 +53,7 @@ func (mc *MemCache) Add(key string, value []byte) {
 	}
 	ele := mc.ll.PushFront(&entry{key, value})
 	mc.cache[key] = ele
-	if mc.MaxEntries != 0 && mc.ll.Len() > mc.MaxEntries {
+	if mc.MaxEntries != 0 && int64(mc.ll.Len()) > mc.MaxEntries {
 		mc.RemoveOldest()
 	}
 }
@@ -106,14 +106,14 @@ func (mc *MemCache) removeElement(e *list.Element) {
 }
 
 // Len returns the number of items in the cache.
-func (mc *MemCache) Len() int {
+func (mc *MemCache) Len() int64 {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
 	if mc.cache == nil {
 		return 0
 	}
-	return mc.ll.Len()
+	return int64(mc.ll.Len())
 }
 
 // Clear purges all stored items from the cache.

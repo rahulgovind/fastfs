@@ -1,6 +1,6 @@
 package fileio
 
 type FileIO interface {
-	ReadAt(offset int, size int) []byte
-	WriteAt(offset int, b []byte)
+	ReadAt(offset int64, size int64) []byte
+	WriteAt(offset int64, b []byte)
 }

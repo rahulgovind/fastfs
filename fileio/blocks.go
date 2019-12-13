@@ -12,7 +12,7 @@ type Block struct {
 	data     []byte
 	inMemory bool
 	mu       sync.RWMutex
-	idx      int
+	idx      int64
 }
 
 // Safe for concurrent use
@@ -22,12 +22,13 @@ type Block struct {
 type BlockManager struct {
 	mu        sync.RWMutex
 	filename  string
-	blockSize int
-	numBlocks int
+	blockSize int64
+	numBlocks int64
 	io        FileIO
 	freeList  *queue.Queue
-	nextId    int
-	blockMap  map[int]*Block
+	nextId    int64
+	blockMap  map[int64]*Block
+	blockChan chan *TempBlock
 }
 
 const (
@@ -35,7 +36,12 @@ const (
 	FileInterface = 2
 )
 
-func NewBlockManager(filename string, numBlocks int, blockSize int, iotype int) *BlockManager {
+type TempBlock struct {
+	idx   int64
+	block *Block
+}
+
+func NewBlockManager(filename string, numBlocks int64, blockSize int64, iotype int) *BlockManager {
 	bm := new(BlockManager)
 	bm.blockSize = blockSize
 	bm.numBlocks = numBlocks
@@ -50,20 +56,45 @@ func NewBlockManager(filename string, numBlocks int, blockSize int, iotype int) 
 
 	bm.freeList = queue.New(int64(numBlocks))
 	bm.nextId = 0
-	bm.blockMap = make(map[int]*Block)
+	bm.blockMap = make(map[int64]*Block)
+	bm.blockChan = make(chan *TempBlock, 1024)
+
+	for i := 0; i < 16; i += 1 {
+		go bm.writer()
+	}
 	return bm
 }
 
+func (bm *BlockManager) writer() {
+	for {
+		tempblock := <-bm.blockChan
+		block := tempblock.block
+		idx := tempblock.idx
+
+		offset := idx * bm.blockSize
+		startTime := time.Now()
+		bm.io.WriteAt(offset, block.data)
+		elapsed := time.Since(startTime)
+		if false {
+			log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
+		}
+		block.mu.Lock()
+		block.data = nil
+		block.inMemory = false
+		block.mu.Unlock()
+	}
+}
+
 // CachePut byte array data. Truncated to blockSize
-func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
+func (bm *BlockManager) Put(b []byte) (blockId int64, err error) {
 
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	var idx int
+	var idx int64
 	if bm.freeList.Len() > 0 {
 		v, _ := bm.freeList.Get(1)
-		idx = v[0].(int)
+		idx = v[0].(int64)
 	} else {
 		if bm.nextId >= bm.numBlocks {
 			return -1, errors.New("no more free blocks")
@@ -79,26 +110,19 @@ func (bm *BlockManager) Put(b []byte) (blockId int, err error) {
 
 	bm.blockMap[idx] = block
 	// Transfer to queue instead
-	go func() {
-		offset := idx * bm.blockSize
-		startTime := time.Now()
-		bm.io.WriteAt(offset, block.data)
-		elapsed := time.Since(startTime)
-		if false {
-			log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
-		}
-		block.mu.Lock()
-		block.data = nil
-		block.inMemory = false
-		block.mu.Unlock()
-	}()
+
+	if len(bm.blockChan) > cap(bm.blockChan) {
+		log.Error("Back pressure from block writer. Slowing down.")
+	}
+
+	bm.blockChan <- &TempBlock{idx, block}
 
 	//log.Debug("Created block ", idx)
 	return idx, nil
 }
 
 // Get block blockId. Truncate to n bytes
-func (bm *BlockManager) Get(blockId int, n int) ([]byte, error) {
+func (bm *BlockManager) Get(blockId int64, n int64) ([]byte, error) {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 
@@ -120,7 +144,7 @@ func (bm *BlockManager) Get(blockId int, n int) ([]byte, error) {
 }
 
 // Free block blockId
-func (bm *BlockManager) Free(blockId int) {
+func (bm *BlockManager) Free(blockId int64) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 

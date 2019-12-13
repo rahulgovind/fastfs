@@ -12,9 +12,8 @@ import (
 	"runtime/debug"
 )
 
-
 func main() {
-	log.SetReportCaller(true)
+	//log.SetReportCaller(true)
 
 	//defer profile.Start(profile.MemProfile).Stop()
 	var bucket string
@@ -83,7 +82,7 @@ func main() {
 	}
 
 	//log.SetLevel(log.ErrorLevel)
-	hc := hybridcache.NewMemDiskHybridCache(128, 512, 1024*1024,
+	hc := hybridcache.NewMemDiskHybridCache(512, 1024, 1024*1024,
 		"testdata", fileio.FileInterface)
 	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
 	//c.Clear()

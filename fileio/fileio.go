@@ -10,7 +10,7 @@ type DirectFileIO struct {
 	file *os.File
 }
 
-func NewDirectFileIO(filename string, size int) *DirectFileIO {
+func NewDirectFileIO(filename string, size int64) *DirectFileIO {
 	dfio := new(DirectFileIO)
 
 	file, err := os.Create(filename)
@@ -18,7 +18,7 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 		log.Fatal(err)
 	}
 
-	file.Truncate(int64(size))
+	file.Truncate(size)
 	err = file.Close()
 	if err != nil {
 		log.Fatal(err)
@@ -33,9 +33,9 @@ func NewDirectFileIO(filename string, size int) *DirectFileIO {
 	return dfio
 }
 
-func (dfio *DirectFileIO) ReadAt(offset int, size int) []byte {
+func (dfio *DirectFileIO) ReadAt(offset int64, size int64) []byte {
 	out := make([]byte, size)
-	n, err := dfio.file.ReadAt(out, int64(offset))
+	n, err := dfio.file.ReadAt(out, offset)
 	if err != nil && err != io.EOF {
 		log.Fatal(err)
 	}
@@ -43,6 +43,6 @@ func (dfio *DirectFileIO) ReadAt(offset int, size int) []byte {
 	return out
 }
 
-func (dfio *DirectFileIO) WriteAt(offset int, b []byte) {
+func (dfio *DirectFileIO) WriteAt(offset int64, b []byte) {
 	dfio.file.WriteAt(b, int64(offset))
 }

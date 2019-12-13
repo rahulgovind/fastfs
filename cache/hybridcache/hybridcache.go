@@ -12,7 +12,7 @@ type HybridCache struct {
 	dc cache.Cache
 }
 
-func NewHybridCache(maxMemEntries int, dc cache.Cache) *HybridCache {
+func NewHybridCache(maxMemEntries int64, dc cache.Cache) *HybridCache {
 	hc := new(HybridCache)
 	hc.mc = memcache.NewMemCache(maxMemEntries)
 	hc.dc = dc
@@ -20,7 +20,7 @@ func NewHybridCache(maxMemEntries int, dc cache.Cache) *HybridCache {
 	return hc
 }
 
-func NewMemDiskHybridCache(maxMemEntries int, maxDiskEntries int, blockSize int,
+func NewMemDiskHybridCache(maxMemEntries int64, maxDiskEntries int64, blockSize int64,
 	filename string, iotype int) *HybridCache {
 	hc := new(HybridCache)
 	hc.mc = memcache.NewMemCache(maxMemEntries)
@@ -61,7 +61,7 @@ func (hc *HybridCache) Get(key string) ([]byte, bool) {
 }
 
 // Approximate number of elements in the cache
-func (hc *HybridCache) Len() int {
+func (hc *HybridCache) Len() int64 {
 	return hc.mc.Len() + hc.dc.Len()
 }
 
