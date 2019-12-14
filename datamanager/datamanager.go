@@ -42,7 +42,6 @@ type DataManager struct {
 	mm             *metadatamanager.MetadataManager
 	uploadChan     chan *UploadInput
 	partitioner    partitioner.Partitioner
-	bufChan        chan *bytes.Buffer
 }
 
 type DownloadElement struct {
@@ -80,17 +79,11 @@ func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
 	dm.mm = mm
 
 	dm.uploadChan = make(chan *UploadInput, 128)
-	dm.bufChan = make(chan *bytes.Buffer, 128)
 	dm.partitioner = p
 
 	for i := 0; i < 32; i += 1 {
 		go dm.uploader()
 	}
-
-	//for i := 0; i < 128; i += 1 {
-	//	dm.bufChan <- bytes.NewBuffer(make([]byte, 0, dm.BlockSize))
-	//}
-
 
 	dm.Start()
 	return dm
@@ -283,14 +276,11 @@ func (dm *DataManager) uploader() {
 
 		url := fmt.Sprintf("http://%s/put/%s?block=%d", target, u.path, u.block)
 
-		log.Println("Client put")
-
 		maxRetries := 3
 		numRetries := 0
 
 		for {
 			req, err := http.NewRequest("PUT", url, u.buf)
-			log.Error("Starting PUT: %v", url)
 			if err == io.EOF {
 				break
 			}
@@ -311,11 +301,9 @@ func (dm *DataManager) uploader() {
 			}
 
 			res.Body.Close()
-			log.Error("Ending PUT: %v", url)
 			break
 		}
 		u.buf.Reset()
-		//dm.bufChan <- u.buf
 		<- u.sem
 	}
 }

@@ -229,11 +229,8 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 	for {
 		out <- true
 		buf := bytes.NewBuffer(nil)
-		log.Info("Uploading part", nextUpload)
-		//buf := <- rag.bufChan
 
-		n, readErr := io.CopyN(buf, reader, rag.blockSize)
-		log.Errorf("Written: %v\tBuf len: %v", n, len(buf.Bytes()))
+		_, readErr := io.CopyN(buf, reader, rag.blockSize)
 
 		if readErr != nil && readErr != io.EOF {
 			log.Fatal(readErr)
