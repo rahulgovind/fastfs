@@ -332,6 +332,7 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 		if err != nil {
 			log.Error(err)
 			w.WriteHeader(500)
+			return
 		}
 
 		buf := bytes.NewBuffer(nil)

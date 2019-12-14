@@ -310,7 +310,7 @@ func (dm *DataManager) uploader() {
 				log.Fatal(err)
 			}
 
-			defer res.Body.Close()
+			res.Body.Close()
 			break
 		}
 
