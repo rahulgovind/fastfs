@@ -233,7 +233,7 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 		//buf := <- rag.bufChan
 
 		n, readErr := io.CopyN(buf, reader, rag.blockSize)
-		log.Errorf("Written: %v\tBuf len: %v", n,
+		log.Errorf("Written: %v\tBuf len: %v", n, len(buf.Bytes()))
 
 		if readErr != nil && readErr != io.EOF {
 			log.Fatal(readErr)
