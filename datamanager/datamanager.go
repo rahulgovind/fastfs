@@ -83,9 +83,10 @@ func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
 	dm.bufChan = make(chan *bytes.Buffer, 128)
 	dm.partitioner = p
 
-	for i := 0; i < 16; i += 1 {
+	for i := 0; i < 32; i += 1 {
 		go dm.uploader()
 	}
+
 	for i := 0; i < 128; i += 1 {
 		dm.bufChan <- bytes.NewBuffer(make([]byte, dm.BlockSize))
 	}
