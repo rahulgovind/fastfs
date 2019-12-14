@@ -290,7 +290,7 @@ func (dm *DataManager) uploader() {
 
 		for {
 			req, err := http.NewRequest("PUT", url, u.buf)
-
+			log.Error("Starting PUT: %v", url)
 			if err == io.EOF {
 				break
 			}
@@ -311,9 +311,10 @@ func (dm *DataManager) uploader() {
 			}
 
 			res.Body.Close()
+			log.Error("Ending PUT: %v", url)
 			break
 		}
-
+		dm.bufChan <- u.buf
 		<- u.sem
 	}
 }
