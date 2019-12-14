@@ -315,7 +315,7 @@ func (dm *DataManager) uploader() {
 			break
 		}
 		u.buf.Reset()
-		dm.bufChan <- u.buf
+		//dm.bufChan <- u.buf
 		<- u.sem
 	}
 }
