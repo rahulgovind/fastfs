@@ -5,6 +5,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/rahulgovind/fastfs/consistenthash"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 )
 
 // Partitioner has one job:
@@ -14,6 +15,7 @@ type Partitioner interface {
 	NotifyJoin(n *memberlist.Node)
 	NotifyLeave(n *memberlist.Node)
 	NotifyUpdate(n *memberlist.Node)
+	PickRandom() string
 }
 
 type HashPartitioner struct {
@@ -28,6 +30,10 @@ func NewHashPartitioner() *HashPartitioner {
 
 func (hp *HashPartitioner) GetServer(path string, block int) string {
 	return hp.hm.Get(fmt.Sprintf("%s:%d", path, block))
+}
+
+func (hp *HashPartitioner) PickRandom() string {
+	return hp.hm.Get(fmt.Sprintf("%d", rand.Int()))
 }
 
 func (hp *HashPartitioner) NotifyJoin(n *memberlist.Node) {

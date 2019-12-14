@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
@@ -196,9 +197,13 @@ func (c *Client) getBlock(path string, block int64, w io.Writer) error {
 }
 
 func (c *Client) ReadFrom(r io.ReadCloser, path string) {
-	var client http.Client
+	var client = &http.Client{
+		//CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		//	return http.ErrUseLastResponse
+		//},
+	}
 
-	url := fmt.Sprintf("http://%s/data/%s", c.primaryAddr, path)
+	url := fmt.Sprintf("http://%s/put/%s", c.servers[rand.Intn(len(c.servers))], path)
 	req, err := http.NewRequest("PUT", url, r)
 
 	if err != nil {

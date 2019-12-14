@@ -165,12 +165,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		path = query[firstSlash+1:]
 	}
 
+	fmt.Println("Got: ", req.Method, req.RequestURI)
 	if req.Method == "HEAD" {
 		s.handleHead(w, req, path)
 		return
 	}
 
-	if req.Method == "PUT" {
+	if req.Method == "PUT"  || req.Method == "POST" || cmd == "put" {
 		s.handlePut(w, req, path)
 		return
 	}
@@ -330,13 +331,13 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 			log.Error(err)
 			w.WriteHeader(500)
 		}
+
 		buf := bytes.NewBuffer(nil)
 		io.Copy(buf, req.Body)
 		s.dm.CachePut(path, blockNum, buf.Bytes())
 		return
 	}
 
-	log.Info("Received PUT request for ", path)
 	s.dm.Upload(path, req.Body)
 	req.Body.Close()
 	//reader, writer := io.Pipe()
