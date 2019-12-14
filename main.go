@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pkg/profile"
 	"github.com/rahulgovind/fastfs/cache/hybridcache"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/fileio"
@@ -28,6 +29,7 @@ func main() {
 	var blockSizeKB int
 	var maxMem int
 	var maxDisk int
+	var cpuProfile bool
 
 	app := cli.NewApp()
 	app.Name = "FastFS Node"
@@ -103,12 +105,21 @@ func main() {
 			Destination: &maxDisk,
 			Value:       1024,
 		},
+		&cli.BoolFlag{
+			Name:        "cpu-profile",
+			Usage:       "Profile CPU",
+			Destination: &cpuProfile,
+		},
 	}
 
 	if verbose {
 		log.SetLevel(log.DebugLevel)
 	}
 
+	if cpuProfile {
+		defer profile.Start(profile.MemProfile).Stop()
+	}
+	
 	err := app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
