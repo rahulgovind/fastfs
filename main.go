@@ -23,8 +23,12 @@ func main() {
 	var primaryAddr string
 	var primaryPort int
 	var redisAddr string
+	var numDownloaders int
+	var verbose bool
+	var blockSizeKB int
+	var maxMem int
+	var maxDisk int
 
-	log.SetLevel(log.DebugLevel)
 	app := cli.NewApp()
 	app.Name = "FastFS Node"
 	app.Usage = "Create FastFS Nodepoint"
@@ -70,6 +74,39 @@ func main() {
 			Destination: &redisAddr,
 			Value:       "localhost:6379",
 		},
+		&cli.IntFlag{
+			Name:        "num-downloaders",
+			Usage:       "Number of downloaders",
+			Destination: &numDownloaders,
+			Value:       16,
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			Usage:       "Verbose logging",
+			Destination: &verbose,
+		},
+		&cli.IntFlag{
+			Name:        "block-size in KB",
+			Usage:       "Block size for storage and tramission",
+			Destination: &blockSizeKB,
+			Value:       1024,
+		},
+		&cli.IntFlag{
+			Name:        "mem-max",
+			Usage:       "Maximum memory to use in MB. Cache entries = Max memory / num entries",
+			Destination: &maxMem,
+			Value:       512,
+		},
+		&cli.IntFlag{
+			Name:        "disk-max",
+			Usage:       "Maximum disk space to use in MB. Cache entries = Max disk space / num entries",
+			Destination: &maxDisk,
+			Value:       1024,
+		},
+	}
+
+	if verbose {
+		log.SetLevel(log.DebugLevel)
 	}
 
 	err := app.Run(os.Args)
@@ -81,9 +118,12 @@ func main() {
 		fsPort = port + 100
 	}
 
+	blockSize := int64(1024 * blockSizeKB)
+	maxMemEntries := int64(1024*1024*maxMem) / blockSize
+	maxDiskEntries := int64(1024*1024*maxDisk) / blockSize
 	//log.SetLevel(log.ErrorLevel)
-	hc := hybridcache.NewMemDiskHybridCache(512, 1024, 1024*1024,
-		"testdata", fileio.FileInterface)
+	hc := hybridcache.NewMemDiskHybridCache(maxMemEntries, maxDiskEntries, blockSize,
+		"/tmp/testdata", fileio.FileInterface)
 	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
 	//c.Clear()
 	//c := badgercache.NewBadgerCache()
@@ -92,20 +132,11 @@ func main() {
 	serverAddr := fmt.Sprintf("%v:%v", addr, fsPort)
 	isPrimary := port == primaryPort && addr == primaryAddr
 	mm := metadatamanager.NewMetadataManager(redisAddr, bucket, isPrimary)
-	dm := datamanager.New(bucket, 8, hc, 1024*1024, serverAddr, mm)
+	dm := datamanager.New(bucket, numDownloaders, hc, blockSize, serverAddr, mm)
 
 	partitioner := NewHashPartitioner()
 	debug.SetGCPercent(80)
 	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), partitioner)
-
-	//config := memberlist.DefaultLocalConfig()
-	//
-	//config.BindPort = port
-	//config.AdvertisePort = port
-	//config.Name = fmt.Sprintf("localhost:%v", 8081)
-	//config.Events = partitioner
-	//list, err := memberlist.Create(config)
-	//fmt.Println(list)
 
 	s := NewServer(addr, fsPort, dm, mm, partitioner, fastfs)
 	s.Serve()

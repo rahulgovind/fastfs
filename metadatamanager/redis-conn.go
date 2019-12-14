@@ -3,11 +3,13 @@ package metadatamanager
 import (
 	"github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
+	"sync"
 	"time"
 )
 
 type RedisConn struct {
 	client *redis.Client
+	mu sync.Mutex
 }
 
 func NewRedisConn(addr string) *RedisConn {
@@ -16,13 +18,23 @@ func NewRedisConn(addr string) *RedisConn {
 		Addr:     addr,
 		Password: "",
 		DB:       0,
-		DialTimeout: 5 * time.Second,
+		DialTimeout: 10 * time.Second,
 		PoolSize:    300,
 	})
 	return conn
 }
 
+func (rc *RedisConn) Acquire() {
+	rc.mu.Lock()
+}
+
+func (rc *RedisConn) Release() {
+	rc.mu.Unlock()
+}
+
 func (rc *RedisConn) Get(key string) (string, bool) {
+	rc.Acquire()
+	defer rc.Release()
 	val, err := rc.client.Get(key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -35,6 +47,8 @@ func (rc *RedisConn) Get(key string) (string, bool) {
 }
 
 func (rc *RedisConn) Set(key string, value string) {
+	rc.Acquire()
+	defer rc.Release()
 	err := rc.client.Set(key, value, time.Hour).Err()
 	if err != nil {
 		log.Fatalf("%v %s %s", err, key, value)
@@ -42,6 +56,8 @@ func (rc *RedisConn) Set(key string, value string) {
 }
 
 func (rc *RedisConn) MGet(keys []string) (values []string, oks []bool) {
+	rc.Acquire()
+	defer rc.Release()
 	if len(keys) == 0 {
 		return
 	}
@@ -63,6 +79,8 @@ func (rc *RedisConn) MGet(keys []string) (values []string, oks []bool) {
 }
 
 func (rc *RedisConn) MSet(keys []string, values []string) {
+	rc.Acquire()
+	defer rc.Release()
 	var pairs []string
 	if len(keys) != len(values) {
 		log.Fatal("(MSET) Number of keys != Number of values")
@@ -83,10 +101,14 @@ func (rc *RedisConn) MSet(keys []string, values []string) {
 }
 
 func (rc *RedisConn) Delete(key string) {
+	rc.Acquire()
+	defer rc.Release()
 	rc.client.Del(key).Result()
 }
 
 func (rc *RedisConn) ListGet(key string) ([]string, bool) {
+	rc.Acquire()
+	defer rc.Release()
 	key = "__" + key
 	val, err := rc.client.SMembers(key).Result()
 	if err != nil {
@@ -104,15 +126,21 @@ func (rc *RedisConn) ListGet(key string) ([]string, bool) {
 }
 
 func (rc *RedisConn) ListDelete(key string) {
+	rc.Acquire()
+	defer rc.Release()
 	key = "__" + key
 	rc.client.SRem(key).Result()
 }
 
 func (rc *RedisConn) ListAdd(key string, values ...string) {
+	rc.Acquire()
+	defer rc.Release()
 	key = "__" + key
 	rc.client.SAdd(key, values).Result()
 }
 
 func (rc *RedisConn) Flush() {
+	rc.Acquire()
+	defer rc.Release()
 	rc.client.FlushAll().Val()
 }

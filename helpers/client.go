@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -63,11 +64,12 @@ func (d *DownloadReadCloser) Close() error {
 }
 
 type UploadWriteCloser struct {
-	respBody io.ReadCloser
-	writer   io.WriteCloser
-	reader   io.ReadCloser
-	wg       sync.WaitGroup
-	c        *Client
+	respBody       io.ReadCloser
+	writer         io.WriteCloser
+	bufferedWriter *bufio.Writer
+	reader         io.ReadCloser
+	wg             sync.WaitGroup
+	c              *Client
 }
 
 func NewUploadWriteCloser(c *Client, path string) *UploadWriteCloser {
@@ -75,6 +77,7 @@ func NewUploadWriteCloser(c *Client, path string) *UploadWriteCloser {
 	u.c = c
 
 	u.reader, u.writer = io.Pipe()
+	u.bufferedWriter = bufio.NewWriterSize(u.writer, 1024*1024)
 
 	u.wg = sync.WaitGroup{}
 	u.wg.Add(1)
@@ -86,10 +89,11 @@ func NewUploadWriteCloser(c *Client, path string) *UploadWriteCloser {
 }
 
 func (u *UploadWriteCloser) Write(b []byte) (int, error) {
-	return u.writer.Write(b)
+	return u.bufferedWriter.Write(b)
 }
 
 func (u *UploadWriteCloser) Close() error {
+	u.bufferedWriter.Flush()
 	u.writer.Close()
 	u.wg.Wait()
 	return nil
