@@ -106,17 +106,20 @@ func (mm *MetadataManager) AddToList(dir string, filename string, size int64) {
 }
 
 func (mm *MetadataManager) RemoveFromList(filepath string) {
+
+	if strings.HasSuffix(filepath, "/") {
+		// Is a directory
+		log.Fatal("Can't delete directorie yet")
+	}
+	// File
 	lastIndex := strings.LastIndex(filepath, "/")
 	dir := filepath
 	if lastIndex != -1 {
-		dir = dir[:lastIndex + 1]
+		dir = dir[:lastIndex+1]
 	}
+	mm.centralServer.ListDelete(dir, filepath)
+	mm.centralServer.Delete(filepath)
 
-	list, _ := mm.GetList(dir)
-	for _, file := range list.Files {
-		mm.centralServer.Delete(file.Path)
-	}
-	mm.centralServer.ListDelete(dir)
 }
 
 func (mm *MetadataManager) getListDirect(dir string) (common.FileList, error) {

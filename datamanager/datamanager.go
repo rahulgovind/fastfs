@@ -263,6 +263,7 @@ func (dm *DataManager) Upload(path string, r io.ReadCloser) {
 
 func (dm *DataManager) Delete(path string) {
 	err := s3.DeleteObject(dm.bucket, path)
+	dm.mm.RemoveFromList(path)
 	if err != nil {
 		log.Error(err)
 	}

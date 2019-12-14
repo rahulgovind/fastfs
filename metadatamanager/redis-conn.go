@@ -9,15 +9,15 @@ import (
 
 type RedisConn struct {
 	client *redis.Client
-	mu sync.Mutex
+	mu     sync.Mutex
 }
 
 func NewRedisConn(addr string) *RedisConn {
 	conn := new(RedisConn)
 	conn.client = redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: "",
-		DB:       0,
+		Addr:        addr,
+		Password:    "",
+		DB:          0,
 		DialTimeout: time.Second,
 		PoolSize:    300,
 	})
@@ -26,11 +26,11 @@ func NewRedisConn(addr string) *RedisConn {
 
 func (rc *RedisConn) Acquire() {
 	// No locking needed
-	rc.mu.Lock()
+	//rc.mu.Lock()
 }
 
 func (rc *RedisConn) Release() {
-	rc.mu.Unlock()
+	//rc.mu.Unlock()
 }
 
 func (rc *RedisConn) Get(key string) (string, bool) {
@@ -127,11 +127,11 @@ func (rc *RedisConn) ListGet(key string) ([]string, bool) {
 	return val, true
 }
 
-func (rc *RedisConn) ListDelete(key string) {
+func (rc *RedisConn) ListDelete(key string, values ...string) {
 	rc.Acquire()
 	defer rc.Release()
 	key = "__" + key
-	rc.client.SRem(key).Result()
+	rc.client.SRem(key, values).Result()
 }
 
 func (rc *RedisConn) ListAdd(key string, values ...string) {
