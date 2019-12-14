@@ -338,18 +338,18 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 		return
 	}
 
-	s.dm.Upload(path, req.Body)
-	req.Body.Close()
-	//reader, writer := io.Pipe()
-	//
-	//rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
-	//
-	//go s.dm.Upload(path, reader)
-	//rag.ReadFrom(req.Body)
-	//
-	//writer.Close()
-	//reader.Close()
+	//s.dm.Upload(path, req.Body)
 	//req.Body.Close()
+	reader, writer := io.Pipe()
+
+	rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
+
+	go s.dm.Upload(path, reader)
+	rag.ReadFrom(req.Body)
+
+	writer.Close()
+	reader.Close()
+	req.Body.Close()
 
 	log.Info("Done copying data")
 }

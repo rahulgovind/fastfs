@@ -117,7 +117,7 @@ func main() {
 	}
 
 	if cpuProfile {
-		defer profile.Start(profile.MemProfile).Stop()
+		defer profile.Start().Stop()
 	}
 
 	err := app.Run(os.Args)
