@@ -87,9 +87,9 @@ func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
 		go dm.uploader()
 	}
 
-	for i := 0; i < 128; i += 1 {
-		dm.bufChan <- bytes.NewBuffer(make([]byte, 0, dm.BlockSize))
-	}
+	//for i := 0; i < 128; i += 1 {
+	//	dm.bufChan <- bytes.NewBuffer(make([]byte, 0, dm.BlockSize))
+	//}
 
 
 	dm.Start()

@@ -197,6 +197,7 @@ type ReverseAggregator struct {
 	writer    io.WriteCloser
 	reader    io.Reader
 	lookAhead int
+	blockSize int64
 }
 
 func (dm *DataManager) NewReverseAggregator(path string, reader io.Reader, lookAhaead int) *ReverseAggregator {
@@ -208,7 +209,7 @@ func (dm *DataManager) NewReverseAggregator(path string, reader io.Reader, lookA
 	rag.bufChan = dm.bufChan
 	rag.reader, rag.writer = io.Pipe()
 	rag.uploadChan = dm.uploadChan
-
+	rag.blockSize = dm.BlockSize
 	go rag.ReadFrom(reader)
 	return rag
 }
@@ -231,8 +232,8 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 		log.Info("Uploading part", nextUpload)
 		//buf := <- rag.bufChan
 
-		n, readErr := io.CopyN(buf, reader, int64(buf.Cap()))
-		log.Errorf("Written: %v\tBuf len: %v", n, len(buf.Bytes()))
+		n, readErr := io.CopyN(buf, reader, rag.blockSize)
+		log.Errorf("Written: %v\tBuf len: %v", n,
 
 		if readErr != nil && readErr != io.EOF {
 			log.Fatal(readErr)
