@@ -355,10 +355,10 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 		return
 	}
 
-	s.dm.Upload(path, req.Body)
-	//rag := s.dm.NewReverseAggregator(path, req.Body, 16)
-	//
-	//s.dm.Upload(path, rag)
+	//s.dm.Upload(path, req.Body)
+	rag := s.dm.NewReverseAggregator(path, req.Body, 16)
+	
+	s.dm.Upload(path, rag)
 	req.Body.Close()
 
 	log.Info("Done copying data")
