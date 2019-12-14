@@ -18,7 +18,7 @@ func NewRedisConn(addr string) *RedisConn {
 		Addr:     addr,
 		Password: "",
 		DB:       0,
-		DialTimeout: 10 * time.Second,
+		DialTimeout: time.Second,
 		PoolSize:    300,
 	})
 	return conn
@@ -26,11 +26,11 @@ func NewRedisConn(addr string) *RedisConn {
 
 func (rc *RedisConn) Acquire() {
 	// No locking needed
-	//rc.mu.Lock()
+	rc.mu.Lock()
 }
 
 func (rc *RedisConn) Release() {
-	//rc.mu.Unlock()
+	rc.mu.Unlock()
 }
 
 func (rc *RedisConn) Get(key string) (string, bool) {
@@ -50,6 +50,7 @@ func (rc *RedisConn) Get(key string) (string, bool) {
 func (rc *RedisConn) Set(key string, value string) {
 	rc.Acquire()
 	defer rc.Release()
+	log.Infof("Setting %v => %v", key, value)
 	err := rc.client.Set(key, value, time.Hour).Err()
 	if err != nil {
 		log.Fatalf("%v %s %s", err, key, value)
