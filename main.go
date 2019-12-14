@@ -113,8 +113,8 @@ func main() {
 		},
 	}
 
-	if verbose {
-		log.SetLevel(log.DebugLevel)
+	if !verbose {
+		log.SetLevel(log.ErrorLevel)
 	}
 
 	if cpuProfile {
