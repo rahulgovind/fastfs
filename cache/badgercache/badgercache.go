@@ -55,7 +55,7 @@ func (bc *BadgerCache) Remove(key string) {
 	})
 }
 
-func (bc *BadgerCache) Len() int {
+func (bc *BadgerCache) Len() int64 {
 	return -1
 }
 

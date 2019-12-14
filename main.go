@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/profile"
+	"github.com/rahulgovind/fastfs/cache/badgercache"
 	"github.com/rahulgovind/fastfs/cache/hybridcache"
 	"github.com/rahulgovind/fastfs/datamanager"
-	"github.com/rahulgovind/fastfs/fileio"
 	"github.com/rahulgovind/fastfs/metadatamanager"
 	"github.com/rahulgovind/fastfs/partitioner"
 	log "github.com/sirupsen/logrus"
@@ -134,12 +134,12 @@ func main() {
 	maxMemEntries := int64(1024*1024*maxMem) / blockSize
 	maxDiskEntries := int64(1024*1024*maxDisk) / blockSize
 	//log.SetLevel(log.ErrorLevel)
-	hc := hybridcache.NewMemDiskHybridCache(maxMemEntries, maxDiskEntries, blockSize,
-		"/tmp/testdata", fileio.FileInterface)
+	//hc := hybridcache.NewMemDiskHybridCache(maxMemEntries, maxDiskEntries, blockSize,
+	//	"/tmp/testdata", fileio.FileInterface)
 	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
 	//c.Clear()
-	//c := badgercache.NewBadgerCache()
-	//hc := hybridcache.NewHybridCache(32, c)
+	c := badgercache.NewBadgerCache()
+	hc := hybridcache.NewHybridCache(32, c)
 
 	serverAddr := fmt.Sprintf("%v:%v", addr, fsPort)
 	isPrimary := port == primaryPort && addr == primaryAddr
