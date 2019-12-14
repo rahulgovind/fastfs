@@ -10,6 +10,7 @@ import (
 	"github.com/rahulgovind/fastfs/csvutils"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/metadatamanager"
+	"github.com/rahulgovind/fastfs/partitioner"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"math"
@@ -25,13 +26,14 @@ type Server struct {
 	blockHandler func(path string, block int, w io.Writer)
 	dm           *datamanager.DataManager
 	mm           *metadatamanager.MetadataManager
-	partitioner  Partitioner
+	partitioner  partitioner.Partitioner
 	localClient  *Client
 	localAddress string
 	fastfs       *FastFS
 }
 
-func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatamanager.MetadataManager, p Partitioner,
+func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatamanager.MetadataManager,
+	p partitioner.Partitioner,
 	fastfs *FastFS) *Server {
 	s := new(Server)
 	s.addr = addr
@@ -227,7 +229,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			// Redirect?
 			if force != "1" {
-				target := s.partitioner.GetServer(path, int(start/s.localClient.BlockSize))
+				target := s.partitioner.GetServer(path, start/s.localClient.BlockSize)
 
 				fmt.Println(target, s.localAddress)
 				if target != s.localAddress {
@@ -248,7 +250,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)
 			if force != "1" {
-				target := s.partitioner.GetServer(path, int(blockNum))
+				target := s.partitioner.GetServer(path, blockNum)
 
 				if s.localAddress != target {
 					req.URL.Host = target
@@ -338,17 +340,9 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 		return
 	}
 
-	//s.dm.Upload(path, req.Body)
-	//req.Body.Close()
-	reader, writer := io.Pipe()
+	rag := s.dm.NewReverseAggregator(path, req.Body, 16)
 
-	rag := datamanager.NewReverseAggregator(path, s.localClient, writer, 16)
-
-	go s.dm.Upload(path, reader)
-	rag.ReadFrom(req.Body)
-
-	writer.Close()
-	reader.Close()
+	s.dm.Upload(path, rag)
 	req.Body.Close()
 
 	log.Info("Done copying data")

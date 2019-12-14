@@ -2,23 +2,24 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/rahulgovind/fastfs/datamanager"
+	"github.com/rahulgovind/fastfs/partitioner"
 	"io"
 	"log"
 	"net/http"
 	"time"
-	"errors"
 )
 
 type Client struct {
 	BlockSize   int64
 	ServerAddr  string
 	dm          *datamanager.DataManager
-	partitioner Partitioner
+	partitioner partitioner.Partitioner
 }
 
-func NewClient(ServerAddr string, BlockSize int64, dm *datamanager.DataManager, partitioner Partitioner) *Client {
+func NewClient(ServerAddr string, BlockSize int64, dm *datamanager.DataManager, partitioner partitioner.Partitioner) *Client {
 	c := new(Client)
 	c.ServerAddr = ServerAddr
 	c.BlockSize = BlockSize
@@ -41,7 +42,6 @@ func (c *Client) DirectGet(path string, block int64, addr string, cache bool) ([
 		var buffer *bytes.Buffer
 
 		resp, err := http.Get(url)
-
 
 		if err != nil {
 			log.Fatal(err)
@@ -76,7 +76,7 @@ func (c *Client) DirectGet(path string, block int64, addr string, cache bool) ([
 
 func (c *Client) Get(path string, block int64, ) ([]byte, error) {
 	for {
-		addr := c.partitioner.GetServer(path, int(block))
+		addr := c.partitioner.GetServer(path, block)
 
 		if addr == c.ServerAddr {
 			return c.dm.Get(path, block)

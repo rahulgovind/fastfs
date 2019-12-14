@@ -7,6 +7,7 @@ import (
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/fileio"
 	"github.com/rahulgovind/fastfs/metadatamanager"
+	"github.com/rahulgovind/fastfs/partitioner"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"os"
@@ -143,13 +144,14 @@ func main() {
 	serverAddr := fmt.Sprintf("%v:%v", addr, fsPort)
 	isPrimary := port == primaryPort && addr == primaryAddr
 	mm := metadatamanager.NewMetadataManager(redisAddr, bucket, isPrimary)
-	dm := datamanager.New(bucket, numDownloaders, hc, blockSize, serverAddr, mm)
 
-	partitioner := NewHashPartitioner()
+	pt := partitioner.NewHashPartitioner()
+	dm := datamanager.New(bucket, numDownloaders, hc, blockSize, serverAddr, mm, pt)
+
 	debug.SetGCPercent(80)
-	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), partitioner)
+	fastfs := NewFastFS(addr, port, fsPort, fmt.Sprintf("%v:%v", primaryAddr, primaryPort), pt)
 
-	s := NewServer(addr, fsPort, dm, mm, partitioner, fastfs)
+	s := NewServer(addr, fsPort, dm, mm, pt, fastfs)
 	s.Serve()
 	//s.LoadServer("", 8081)
 

@@ -7,11 +7,14 @@ import (
 	"github.com/golang/groupcache/singleflight"
 	"github.com/rahulgovind/fastfs/cache"
 	"github.com/rahulgovind/fastfs/metadatamanager"
+	"github.com/rahulgovind/fastfs/partitioner"
 	"github.com/rahulgovind/fastfs/s3"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func CacheKeyToString(path string, block int64) string {
@@ -37,11 +40,21 @@ type DataManager struct {
 	BlockSize      int64
 	ServerAddr     string
 	mm             *metadatamanager.MetadataManager
+	uploadChan     chan *UploadInput
+	partitioner    partitioner.Partitioner
+	bufChan        chan *bytes.Buffer
 }
 
 type DownloadElement struct {
 	fLink string
 	out   chan []byte
+}
+
+type UploadInput struct {
+	buf   *bytes.Buffer
+	path  string
+	block int64
+	sem   chan bool
 }
 
 type BlockGetter interface {
@@ -55,7 +68,7 @@ type BlockPutter interface {
 }
 
 func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
-	serverAddr string, mm *metadatamanager.MetadataManager) *DataManager {
+	serverAddr string, mm *metadatamanager.MetadataManager, p partitioner.Partitioner) *DataManager {
 	dm := new(DataManager)
 	dm.cache = hc
 	dm.bucket = bucket
@@ -65,6 +78,19 @@ func New(bucket string, numDownloaders int, hc cache.Cache, blockSize int64,
 	dm.requestCh = make(chan DownloadElement, 1024)
 	dm.ServerAddr = serverAddr
 	dm.mm = mm
+
+	dm.uploadChan = make(chan *UploadInput, 128)
+	dm.bufChan = make(chan *bytes.Buffer, 128)
+	dm.partitioner = p
+
+	for i := 0; i < 16; i += 1 {
+		go dm.uploader()
+	}
+	for i := 0; i < 128; i += 1 {
+		dm.bufChan <- bytes.NewBuffer(make([]byte, dm.BlockSize))
+	}
+
+
 	dm.Start()
 	return dm
 }
@@ -245,5 +271,48 @@ func (dm *DataManager) Delete(path string) {
 	err := s3.DeleteObject(dm.bucket, path)
 	if err != nil {
 		log.Error(err)
+	}
+}
+
+func (dm *DataManager) uploader() {
+	for {
+		u := <-dm.uploadChan
+
+		target := dm.partitioner.GetServer(u.path, u.block)
+
+		url := fmt.Sprintf("http://%s/put/%s?block=%d", target, u.path, u.block)
+
+		log.Println("Client put")
+
+		maxRetries := 3
+		numRetries := 0
+
+		for {
+			req, err := http.NewRequest("PUT", url, u.buf)
+
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				numRetries += 1
+				if numRetries <= maxRetries {
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				log.Fatal(err)
+			}
+
+			client := &http.Client{}
+			res, err := client.Do(req)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			defer res.Body.Close()
+			break
+		}
+
+		<- u.sem
 	}
 }

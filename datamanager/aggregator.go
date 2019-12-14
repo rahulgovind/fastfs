@@ -1,9 +1,9 @@
 package datamanager
 
 import (
+	"bytes"
 	log "github.com/sirupsen/logrus"
 	"io"
-	"sync"
 	"time"
 )
 
@@ -190,90 +190,66 @@ func (f *FakeWriteCloser) Close() error {
 }
 
 type ReverseAggregator struct {
-	path        string
-	putter      BlockPutter
-	writer      io.WriteCloser
-	numParallel int
+	dm        *DataManager
+	path      string
+	bufChan   chan *bytes.Buffer
+	uploadChan chan *UploadInput
+	writer    io.WriteCloser
+	reader    io.Reader
+	lookAhead int
 }
 
-func NewReverseAggregator(path string, putter BlockPutter, writer io.WriteCloser, numParallel int) *ReverseAggregator {
+func (dm *DataManager) NewReverseAggregator(path string, reader io.Reader, lookAhaead int) *ReverseAggregator {
 	rag := new(ReverseAggregator)
 	rag.path = path
-	rag.putter = putter
-	rag.writer = writer
-	rag.numParallel = numParallel
 
+	// TODO: Add uploaders
+	rag.lookAhead = lookAhaead
+	rag.bufChan = dm.bufChan
+	rag.reader, rag.writer = io.Pipe()
+	rag.uploadChan = dm.uploadChan
+
+	go rag.ReadFrom(reader)
 	return rag
 }
 
-func (rag *ReverseAggregator) uploadBlock(blockCh chan *BlockData, bufChan chan []byte) {
-	for {
-		blockData := <-blockCh
-
-		//log.Debugf("look-ahead %v", block)
-		if blockData == nil {
-			break
-		}
-
-		log.Debug("Caching block ", blockData.block)
-		err := rag.putter.Put(rag.path, blockData.block, blockData.data)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		bufChan <- blockData.data
-	}
+func (rag *ReverseAggregator) Read(b []byte) (int, error) {
+	return rag.reader.Read(b)
 }
 
-type SharedBuffer struct {
-	mu   sync.Mutex
-	data [][]byte
+func (rag *ReverseAggregator) Close() error {
+	return nil
 }
 
-func (rag *ReverseAggregator) ReadFrom(reader io.ReadCloser) {
-	log.Debug("Starting read from")
-	blockSize := rag.putter.GetBlockSize()
-
-	blockChan := make(chan *BlockData, rag.numParallel)
-
+func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 	nextUpload := int64(0)
-	bufChan := make(chan []byte, rag.numParallel)
-
-	for i := 0; i < rag.numParallel; i++ {
-		bufChan <- make([]byte, blockSize)
-		go rag.uploadBlock(blockChan, bufChan)
-	}
+	out := make(chan bool, rag.lookAhead)
 
 	for {
-		buf := <-bufChan
-		buf = buf[:cap(buf)]
+		out <- true
 
-		log.Debug("Reading block ", nextUpload)
+		log.Info("Uploading part", nextUpload)
+		buf := <- rag.bufChan
 
-		n, readErr := io.ReadAtLeast(reader, buf, len(buf))
+		buf.Truncate(buf.Cap())
+
+		n, readErr := io.ReadAtLeast(reader, buf.Bytes(), len(buf.Bytes()))
 		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
 			log.Fatal(readErr)
 		}
 
-		log.Debug("Done reading. Writing now.", nextUpload)
-		_, err := rag.writer.Write(buf[:n])
+		_, err := rag.writer.Write(buf.Bytes()[:n])
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		blockChan <- &BlockData{buf[:n], nextUpload}
+		buf.Truncate(n)
+		rag.uploadChan <- &UploadInput{buf, rag.path,  nextUpload, out}
 		nextUpload += 1
-		if readErr == io.EOF  {
+		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
 			break
 		}
 	}
 
-	log.Info("Done")
-	for i := 0; i < rag.numParallel; i++ {
-		blockChan <- nil
-	}
-
-	log.Info("Exit")
 	rag.writer.Close()
-	reader.Close()
 }

@@ -1,4 +1,4 @@
-package main
+package partitioner
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 // Partitioner has one job:
 // Given a file and block number where should the file ideally be stored?
 type Partitioner interface {
-	GetServer(path string, block int) string
+	GetServer(path string, block int64) string
 	NotifyJoin(n *memberlist.Node)
 	NotifyLeave(n *memberlist.Node)
 	NotifyUpdate(n *memberlist.Node)
@@ -28,7 +28,7 @@ func NewHashPartitioner() *HashPartitioner {
 	return hp
 }
 
-func (hp *HashPartitioner) GetServer(path string, block int) string {
+func (hp *HashPartitioner) GetServer(path string, block int64) string {
 	return hp.hm.Get(fmt.Sprintf("%s:%d", path, block))
 }
 

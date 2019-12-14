@@ -309,22 +309,21 @@ func PutOjbect(bucket string, path string, r io.Reader) error {
 		Region: aws.String("us-east-2"),
 	})
 	uploader := s3manager.NewUploader(sess)
-	uploader.PartSize = 10 * 1024 * 1024
-	uploader.Concurrency = 7
+	//uploader.PartSize = 10 * 1024 * 1024
+	//uploader.Concurrency = 7
 
 	result, err := uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(path),
 		Body:   r,
 		ACL:    aws.String("public-read"),
-
 	})
 
 	if err != nil {
 		log.Fatal(err)
 		return fmt.Errorf("failed to upload file, %v", err)
 	}
-	fmt.Printf("file uploaded to, %s\n", result.Location)
+	log.Infof("file uploaded to, %s\n", result.Location)
 
 	return nil
 }
