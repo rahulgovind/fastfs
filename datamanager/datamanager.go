@@ -314,6 +314,7 @@ func (dm *DataManager) uploader() {
 			log.Error("Ending PUT: %v", url)
 			break
 		}
+		u.buf.Reset()
 		dm.bufChan <- u.buf
 		<- u.sem
 	}
