@@ -123,7 +123,10 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 			start := time.Now()
 			if endOffHere-startOffHere > 0 {
 				//log.Debugf("Writing block %v", bdNext.block)
-				w.Write(bdNext.data[startOffHere:endOffHere])
+				_, err := w.Write(bdNext.data[startOffHere:endOffHere])
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 			elapsed := time.Since(start)
 
@@ -162,7 +165,10 @@ func (ag *Aggregator) WriteTo(w io.WriteCloser) {
 		start := time.Now()
 		if endOffHere-startOffHere > 0 {
 			//log.Debugf("Writing block %v", bdNext.block)
-			w.Write(bdNext.data[startOffHere:endOffHere])
+			_, err := w.Write(bdNext.data[startOffHere:endOffHere])
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 		elapsed := time.Since(start)
 

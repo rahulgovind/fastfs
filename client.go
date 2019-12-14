@@ -101,6 +101,7 @@ func (c *Client) Get(path string, block int64, ) ([]byte, error) {
 		buffer = new(bytes.Buffer)
 		_, err = io.Copy(buffer, resp.Body)
 		if err != nil {
+			buffer.Reset()
 			numRetries += 1
 			if numRetries <= maxRetries {
 				time.Sleep(2 * time.Second)
@@ -109,7 +110,7 @@ func (c *Client) Get(path string, block int64, ) ([]byte, error) {
 			return nil, err
 		}
 
-		defer resp.Body.Close()
+		resp.Body.Close()
 		return buffer.Bytes(), nil
 	}
 }

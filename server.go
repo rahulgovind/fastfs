@@ -263,7 +263,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			data, ok := s.dm.CacheGet(path, blockNum)
 
 			if ok {
-				dataWriter.Write(data)
+				_, err = dataWriter.Write(data)
+				if err != nil {
+					log.Fatal(err)
+				}
 
 				if onlyCache {
 					s.dm.CacheDelete(path, blockNum)
@@ -288,8 +291,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if err == nil {
 					log.Error("Started copying\t", blockNum)
 					s.dm.CachePut(path, blockNum, data)
-					dataWriter.Write(data)
-
+					_, err = dataWriter.Write(data)
+					if err != nil {
+						log.Fatal(err)
+					}
 					log.Error("Done writing\t", blockNum)
 					return
 				}
@@ -302,13 +307,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				log.Fatal(err)
 			}
 
-			dataWriter.Write(data)
+			_, err = dataWriter.Write(data)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 		return
 	} else if cmd == "ls" {
 		fl, _ := s.mm.GetList(path)
 		res, _ := json.Marshal(fl)
-		w.Write(res)
+		_, err := w.Write(res)
+		if err != nil {
+			log.Fatal(err)
+		}
 		return
 	} else if cmd == "setup" {
 		data := SetupResponse{
@@ -316,7 +327,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			BlockSize: s.dm.BlockSize,
 		}
 		res, _ := json.Marshal(data)
-		w.Write(res)
+		_, err := w.Write(res)
+		if err != nil {
+			log.Fatal(err)
+		}
 		return
 	}
 
