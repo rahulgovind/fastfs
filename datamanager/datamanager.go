@@ -276,6 +276,7 @@ func (dm *DataManager) uploader() {
 		if target == dm.ServerAddr {
 			log.Errorf("Inserting locally %v %v for %v", u.path, u.block, target)
 			dm.CachePut(u.path, u.block, u.buf.Bytes())
+			<- u.sem
 			continue
 		}
 
