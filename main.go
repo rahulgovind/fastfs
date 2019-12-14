@@ -131,8 +131,8 @@ func main() {
 	}
 
 	blockSize := int64(1024 * blockSizeKB)
-	maxMemEntries := int64(1024*1024*maxMem) / blockSize
-	maxDiskEntries := int64(1024*1024*maxDisk) / blockSize
+	//maxMemEntries := int64(1024*1024*maxMem) / blockSize
+	//maxDiskEntries := int64(1024*1024*maxDisk) / blockSize
 	//log.SetLevel(log.ErrorLevel)
 	//hc := hybridcache.NewMemDiskHybridCache(maxMemEntries, maxDiskEntries, blockSize,
 	//	"/tmp/testdata", fileio.FileInterface)
