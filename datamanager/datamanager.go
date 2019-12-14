@@ -189,7 +189,7 @@ func (dm *DataManager) GetBlockSize() int64 {
 
 func (dm *DataManager) CachePut(path string, block int64, data []byte) error {
 	fLink := CacheKeyToString(path, block)
-	fmt.Println("Adding to cache: ", fLink)
+	//fmt.Println("Adding to cache: ", fLink)
 
 	if dm.mm != nil {
 		dm.mm.SetLocation(path, block, dm.ServerAddr)
@@ -274,7 +274,7 @@ func (dm *DataManager) uploader() {
 
 		target := dm.partitioner.GetServer(u.path, u.block)
 		if target == dm.ServerAddr {
-			log.Errorf("Inserting locally %v %v for %v", u.path, u.block, target)
+			//log.Errorf("Inserting locally %v %v for %v", u.path, u.block, target)
 			dm.CachePut(u.path, u.block, u.buf.Bytes())
 			<- u.sem
 			continue
