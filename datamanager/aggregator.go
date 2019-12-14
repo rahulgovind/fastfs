@@ -190,14 +190,13 @@ func (f *FakeWriteCloser) Close() error {
 }
 
 type ReverseAggregator struct {
-	dm        *DataManager
-	path      string
-	bufChan   chan *bytes.Buffer
+	dm         *DataManager
+	path       string
 	uploadChan chan *UploadInput
-	writer    io.WriteCloser
-	reader    io.Reader
-	lookAhead int
-	blockSize int64
+	writer     io.WriteCloser
+	reader     io.Reader
+	lookAhead  int
+	blockSize  int64
 }
 
 func (dm *DataManager) NewReverseAggregator(path string, reader io.Reader, lookAhaead int) *ReverseAggregator {
@@ -206,7 +205,6 @@ func (dm *DataManager) NewReverseAggregator(path string, reader io.Reader, lookA
 
 	// TODO: Add uploaders
 	rag.lookAhead = lookAhaead
-	rag.bufChan = dm.bufChan
 	rag.reader, rag.writer = io.Pipe()
 	rag.uploadChan = dm.uploadChan
 	rag.blockSize = dm.BlockSize
@@ -242,7 +240,7 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 			log.Fatal(err)
 		}
 
-		rag.uploadChan <- &UploadInput{buf, rag.path,  nextUpload, out}
+		rag.uploadChan <- &UploadInput{buf, rag.path, nextUpload, out}
 		nextUpload += 1
 		if readErr == io.EOF {
 			break
