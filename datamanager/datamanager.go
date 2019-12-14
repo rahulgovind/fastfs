@@ -273,6 +273,11 @@ func (dm *DataManager) uploader() {
 		u := <-dm.uploadChan
 
 		target := dm.partitioner.GetServer(u.path, u.block)
+		if target == dm.ServerAddr {
+			log.Errorf("Inserting locally %v %v for %v", u.path, u.block, target)
+			dm.CachePut(u.path, u.block, u.buf.Bytes())
+			continue
+		}
 
 		url := fmt.Sprintf("http://%s/put/%s?block=%d", target, u.path, u.block)
 
