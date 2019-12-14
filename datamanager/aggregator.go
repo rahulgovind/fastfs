@@ -231,13 +231,15 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 		log.Info("Uploading part", nextUpload)
 		buf := <- rag.bufChan
 
-		_, readErr := io.CopyN(buf, reader, int64(buf.Cap()))
+		n, readErr := io.CopyN(buf, reader, int64(buf.Cap()))
+		log.Errorf("Written: %v\tBuf len: %v", n, len(buf.Bytes()))
 
 		if readErr != nil && readErr != io.EOF {
 			log.Fatal(readErr)
 		}
 
 		_, err := rag.writer.Write(buf.Bytes())
+		
 		if err != nil {
 			log.Fatal(err)
 		}
