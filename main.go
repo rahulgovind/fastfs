@@ -89,7 +89,7 @@ func main() {
 			Destination: &verbose,
 		},
 		&cli.IntFlag{
-			Name:        "block-size in KB",
+			Name:        "block-size",
 			Usage:       "Block size for storage and tramission",
 			Destination: &blockSizeKB,
 			Value:       1024,

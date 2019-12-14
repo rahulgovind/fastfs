@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hashicorp/golang-lru"
 	"github.com/rahulgovind/fastfs/common"
 	"github.com/rahulgovind/fastfs/consistenthash"
 	"github.com/rahulgovind/fastfs/s3"
@@ -27,6 +28,7 @@ type Client struct {
 	LookAhead   int
 	Queue       chan *InputData
 	cmap        *consistenthash.Map
+	objectCache *lru.Cache
 }
 
 type InputData struct {
@@ -52,6 +54,7 @@ func NewDownloadReadCloser(c *Client, path string, start int64, end int64) *Down
 	reader, writer := io.Pipe()
 	d.r = reader
 	d.w = writer
+
 	go c.WriteTo(writer, path, start, end)
 	return d
 }
@@ -123,6 +126,8 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 	c.Queue = make(chan *InputData, 10000)
 
 	c.cmap = consistenthash.New(3, nil)
+	c.objectCache, _ = lru.New(10240)
+
 	c.getServers()
 
 	for i := 0; i < lookAhead; i += 1 {
@@ -220,11 +225,14 @@ func (c *Client) ReadFrom(r io.ReadCloser, path string) {
 }
 
 type OffsetReader struct {
-	offset int64
-	path   string
-	client *Client
-	reader io.ReadCloser
-	writer io.WriteCloser
+	offset    int64
+	path      string
+	client    *Client
+	reader    io.ReadCloser
+	writer    io.WriteCloser
+	size      int64
+	lookAhead int
+	endBlock  int64
 }
 
 func NewOffsetReader(client *Client, path string, offset int64) *OffsetReader {
@@ -233,6 +241,21 @@ func NewOffsetReader(client *Client, path string, offset int64) *OffsetReader {
 	r.offset = offset
 	r.client = client
 	r.reader, r.writer = io.Pipe()
+
+	fi, _ := r.client.Stat(path)
+
+	blockSize := r.client.BlockSize
+	maxBlocks := (fi.Size - offset + blockSize - 1) / blockSize
+	if offset%blockSize == 0 && fi.Size%blockSize == 0 {
+		maxBlocks -= 1
+	}
+
+	r.lookAhead = client.LookAhead
+	if r.lookAhead > int(maxBlocks) {
+		r.lookAhead = int(maxBlocks)
+	}
+
+	r.endBlock = (fi.Size + blockSize - 1) / blockSize
 
 	// Load reads stuff written by the downloaders one block at a time
 	go r.load()
@@ -244,18 +267,19 @@ func (r *OffsetReader) load() {
 	blockSize := r.client.BlockSize
 	startBlock := r.offset / r.client.BlockSize
 	startOff := r.offset % blockSize
-	lookAhead := r.client.LookAhead
 
 	nextBlock := startBlock
 	nextDownload := startBlock
 
 	blocks := make(map[int64]*BlockData)
-	out := make(chan *BlockData, r.client.LookAhead)
+
+	out := make(chan *BlockData, r.lookAhead)
 
 	//log.Infof("Ranges: %v\t%v", start, end)
 	readBuffer := bytes.NewBuffer(make([]byte, 0, blockSize))
 
-	for i := 0; i < lookAhead; i++ {
+
+	for i := 0; i < r.lookAhead; i++ {
 		r.client.Queue <- &InputData{r.path, nextDownload,
 			bytes.NewBuffer(make([]byte, 0, blockSize)), out}
 		nextDownload += 1
@@ -263,7 +287,7 @@ func (r *OffsetReader) load() {
 
 	size := int64(0)
 
-	toRead := true
+	toRead := nextDownload <= r.endBlock
 	toAdd := true
 
 	for nextBlock < nextDownload {
@@ -313,6 +337,7 @@ func (r *OffsetReader) load() {
 				r.client.Queue <- &InputData{r.path, nextDownload,
 					bytes.NewBuffer(make([]byte, 0, blockSize)), out}
 				nextDownload += 1
+				toAdd = nextDownload <= r.endBlock
 			}
 
 			nextBlock += 1
@@ -332,6 +357,7 @@ func (r *OffsetReader) Close() error {
 func (c *Client) OpenOffsetReader(path string, startAt int64) io.ReadCloser {
 	return NewOffsetReader(c, path, startAt)
 }
+
 func (c *Client) WriteTo(w io.WriteCloser, path string, start int64, end int64) {
 	startTime := time.Now()
 	blockSize := c.BlockSize
@@ -486,6 +512,11 @@ func (c *Client) ListFiles(dir string) (common.FileList, error) {
 }
 
 func (c *Client) Stat(filePath string) (common.FileInfo, error) {
+	fi, ok := c.objectCache.Get(filePath)
+	if ok {
+		return fi.(common.FileInfo), nil
+	}
+
 	resp, err := makeRequest(fmt.Sprintf("http://%s/data/%s", c.primaryAddr, filePath), "HEAD")
 	if err != nil {
 		return common.FileInfo{}, err
@@ -499,6 +530,8 @@ func (c *Client) Stat(filePath string) (common.FileInfo, error) {
 
 	contentLength := resp.Header.Get("Content-Length")
 	length, _ := strconv.ParseInt(contentLength, 10, 64)
+
+	c.objectCache.Add(filePath, common.FileInfo{filePath, length})
 
 	return common.FileInfo{filePath, length}, nil
 }

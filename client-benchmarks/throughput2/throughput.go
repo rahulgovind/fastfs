@@ -19,7 +19,7 @@ func main() {
 	out := flag.String("out", "", "Output location. Output discarded if empty string passed.")
 	flag.Parse()
 
-	client := helpers.New(*serverAddr, 8, 8)
+	client := helpers.New(*serverAddr, 16, 16)
 	var w io.WriteCloser = &datamanager.FakeWriteCloser{Writer: ioutil.Discard}
 	if *out != "" {
 		f, err := os.Create(*out)
@@ -28,7 +28,7 @@ func main() {
 		}
 		w = f
 	}
-	w.Close()
+defer 	w.Close()
 
 	log.Println("Starting write")
 
