@@ -195,11 +195,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		block := req.URL.Query().Get("block")
 		force := req.URL.Query().Get("force")
 
-		// Compressiong
-		dataWriter := s.getCompressionWriter(w, req)
-		defer dataWriter.Close()
 
 		if block == "" {
+
+			// Compressiong
+			dataWriter := s.getCompressionWriter(w, req)
+			defer dataWriter.Close()
+
 			rangeString := req.Header.Get("Range")
 			fmt.Println("Range string: ", rangeString)
 			if rangeString == "" {
@@ -238,6 +240,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			fmt.Println("Range parameters: ", start, length)
 			s.rangeHandler(path, dataWriter, start, start+length-1)
 		} else {
+
+			// We don't use compression internally
+			dataWriter := &datamanager.FakeWriteCloser{w}
+			defer dataWriter.Close()
 
 			blockNum, err := strconv.ParseInt(block, 10, 32)
 			if force != "1" {
@@ -287,13 +293,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			// No one else has it. Just fetch it from S3 lol
+			fmt.Println("Block hit miss. Fetching from S3")
 			data, err = s.dm.Get(path, blockNum)
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Println("Writing data block")
+
 			dataWriter.Write(data)
-			fmt.Println("Done writing block")
 		}
 		return
 	} else if cmd == "ls" {

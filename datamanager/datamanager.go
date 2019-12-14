@@ -180,7 +180,7 @@ func (dm *DataManager) CachePut(path string, block int64, data []byte) error {
 }
 
 type CountingReader struct {
-	r io.ReadCloser
+	r    io.ReadCloser
 	size int64
 }
 
@@ -198,6 +198,32 @@ func (cr *CountingReader) Size() int64 {
 	return cr.size
 }
 
+type CountingWriter struct {
+	w    io.WriteCloser
+	size int64
+}
+
+func NewCountingWriter(w io.WriteCloser) *CountingWriter {
+	res := new(CountingWriter)
+	res.w = w
+	res.size = 0
+	return res
+}
+
+func (cr *CountingWriter) Write(b []byte) (int, error) {
+	n, err := cr.w.Write(b)
+	cr.size += int64(n)
+	return n, err
+}
+
+func (cr *CountingWriter) Close() error {
+	return cr.w.Close()
+}
+
+func (cr *CountingWriter) Size() int64 {
+	return cr.size
+}
+
 func (dm *DataManager) Upload(path string, r io.ReadCloser) {
 	cr := &CountingReader{r, 0}
 	err := s3.PutOjbect(dm.bucket, path, cr)
@@ -208,7 +234,7 @@ func (dm *DataManager) Upload(path string, r io.ReadCloser) {
 		lastIndex := strings.LastIndex(path, "/")
 		dir := ""
 		if lastIndex != -1 {
-			dir = path[:lastIndex + 1]
+			dir = path[:lastIndex+1]
 		}
 		dm.mm.AddToList(dir, path, cr.Size())
 		log.Infof("Adding to metadata: Dir:%s\tFile:%s\tSize: %d", dir, path, cr.Size())

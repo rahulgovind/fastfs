@@ -119,6 +119,7 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 
 	c.cmap = consistenthash.New(3, nil)
 	c.getServers()
+
 	for i := 0; i < lookAhead; i += 1 {
 		go c.downloader()
 	}
@@ -223,7 +224,10 @@ func NewOffsetReader(client *Client, path string, offset int64) *OffsetReader {
 	r.offset = offset
 	r.client = client
 	r.reader, r.writer = io.Pipe()
+
+	// Load reads stuff written by the downloaders one block at a time
 	go r.load()
+
 	return r
 }
 
@@ -390,15 +394,11 @@ func (c *Client) WriteTo(w io.WriteCloser, path string, start int64, end int64) 
 				endOffHere = endOff
 			}
 
-			start := time.Now()
 			if endOffHere-startOffHere > 0 {
 				//log.Debugf("Writing block %v", bdNext.block)
 				size += endOffHere - startOffHere
 				w.Write(readBuffer.Bytes()[startOffHere:endOffHere])
 			}
-			elapsed := time.Since(start)
-
-			log.Infof("Writing block took %v", elapsed)
 
 			nextBlock += 1
 			if nextDownload > endBlock {
@@ -430,21 +430,18 @@ func (c *Client) WriteTo(w io.WriteCloser, path string, start int64, end int64) 
 			endOffHere = endOff
 		}
 
-		start := time.Now()
 		if endOffHere-startOffHere > 0 {
 			//log.Debugf("Writing block %v", bdNext.block)
 			w.Write(bdNext.data.Bytes()[startOffHere:endOffHere])
 			size += endOffHere - startOffHere
 		}
-		elapsed := time.Since(start)
 
-		log.Infof("Writing block took %v", elapsed)
 		delete(blocks, nextBlock)
 		nextBlock += 1
 	}
 	w.Close()
 	elapsed := time.Since(startTime)
-	fmt.Printf("Time: %v\tSize: %v\tSpeed: %v", elapsed, s3.ByteSize(size), s3.ByteSpeed(size, elapsed))
+	fmt.Printf("Time: %v\tSize: %v\tSpeed: %v\n", elapsed, s3.ByteSize(size), s3.ByteSpeed(size, elapsed))
 }
 
 func (c *Client) OpenReader(filePath string, startAt int64) (io.ReadCloser, error) {
