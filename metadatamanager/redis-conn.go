@@ -25,11 +25,12 @@ func NewRedisConn(addr string) *RedisConn {
 }
 
 func (rc *RedisConn) Acquire() {
-	rc.mu.Lock()
+	// No locking needed
+	//rc.mu.Lock()
 }
 
 func (rc *RedisConn) Release() {
-	rc.mu.Unlock()
+	//rc.mu.Unlock()
 }
 
 func (rc *RedisConn) Get(key string) (string, bool) {
