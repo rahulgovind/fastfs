@@ -3,6 +3,7 @@ package diskcache
 import (
 	"container/list"
 	"github.com/rahulgovind/fastfs/fileio"
+	log "github.com/sirupsen/logrus"
 	"sync"
 )
 
@@ -106,6 +107,8 @@ func (c *DiskCache) RemoveOldest() {
 	if c.cache == nil {
 		return
 	}
+
+	log.Info("Evicting from disk")
 	ele := c.ll.Back()
 	if ele != nil {
 		c.removeElement(ele)

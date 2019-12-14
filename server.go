@@ -349,6 +349,7 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 			return
 		}
 
+		log.Infof("Receiving disaggregated block %v %v", path, blockNum)
 		buf := bytes.NewBuffer(nil)
 		io.Copy(buf, req.Body)
 		s.dm.CachePut(path, blockNum, buf.Bytes())
@@ -357,7 +358,7 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 
 	//s.dm.Upload(path, req.Body)
 	rag := s.dm.NewReverseAggregator(path, req.Body, 16)
-	
+
 	s.dm.Upload(path, rag)
 	req.Body.Close()
 
