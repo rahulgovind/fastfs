@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/klauspost/pgzip"
-	"github.com/minio/select-simd"
 	"github.com/rahulgovind/fastfs/csvutils"
 	"github.com/rahulgovind/fastfs/datamanager"
 	"github.com/rahulgovind/fastfs/metadatamanager"
 	"github.com/rahulgovind/fastfs/partitioner"
+	"github.com/rahulgovind/select-simd"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"math"
@@ -52,7 +52,7 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatam
 	s.fastfs = fastfs
 	s.s3UploadChan = make(chan *S3UploadInput, 1024)
 
-	for i := 0; i < 3; i += 1{
+	for i := 0; i < 3; i += 1 {
 		go s.s3uploader()
 	}
 	return s

@@ -63,6 +63,6 @@ func main() {
 		fmt.Println(elapsed.Nanoseconds())
 		total += elapsed.Nanoseconds()
 	}
-	
+
 	fmt.Printf("Took average %v microseconds", float64(total)/float64(numIterations)/1000)
 }
