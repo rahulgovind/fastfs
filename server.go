@@ -284,7 +284,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if ok {
 				_, err = dataWriter.Write(data)
 				if err != nil {
-					log.Error("Cache data return failed: ", err)
+					log.Errorf("Cache data return failed for %v: %v", req.RequestURI, err)
+					return
 				}
 
 				if onlyCache {
