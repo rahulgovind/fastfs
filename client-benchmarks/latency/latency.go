@@ -46,4 +46,14 @@ func main() {
 	makeRequest(url, *startFlag)
 	elapsed = time.Since(start)
 	fmt.Printf("%v to download 1K (Request 2)", elapsed)
+
+	total := int64(0)
+	numIterations := 10
+	for i := 0; i < numIterations; i += 1 {
+		start = time.Now()
+		makeRequest(url, *startFlag)
+		elapsed = time.Since(start)
+		total += elapsed.Nanoseconds()
+	}
+	fmt.Printf("Took %v microseconds", float64(total)/float64(numIterations))
 }
