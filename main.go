@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	//log.SetReportCaller(true)
+	log.SetReportCaller(true)
 
 	//defer profile.Start(profile.MemProfile).Stop()
 	var bucket string
