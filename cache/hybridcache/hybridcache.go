@@ -42,6 +42,7 @@ func (hc *HybridCache) Add(key string, value []byte) {
 }
 
 func (hc *HybridCache) Get(key string) ([]byte, bool) {
+	log.Info("Hybrid Cache Get ", key)
 	// In memcache?
 	if data, ok := hc.mc.Get(key); ok {
 		log.Info("Memcache hit", key)

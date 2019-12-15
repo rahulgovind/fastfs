@@ -323,12 +323,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			fmt.Println("Block hit miss. Fetching from S3. ", path)
 			data, err = s.dm.Get(path, blockNum)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("Error on get: ", err)
 			}
 
 			_, err = dataWriter.Write(data)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("Error on write: ", err)
 			}
 		}
 		return
