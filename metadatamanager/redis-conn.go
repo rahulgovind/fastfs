@@ -18,7 +18,7 @@ func NewRedisConn(addr string) *RedisConn {
 		Addr:        addr,
 		Password:    "",
 		DB:          0,
-		DialTimeout: time.Minute, 
+		DialTimeout: time.Minute,
 		PoolSize:    300,
 	})
 	return conn

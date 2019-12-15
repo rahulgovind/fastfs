@@ -97,12 +97,12 @@ func (mc *MemCache) RemoveOldest() {
 }
 
 func (mc *MemCache) removeElement(e *list.Element) {
-	mc.ll.Remove(e)
 	kv := e.Value.(*entry)
-	delete(mc.cache, kv.key)
 	if mc.OnEvicted != nil {
 		mc.OnEvicted(kv.key, kv.value)
 	}
+	mc.ll.Remove(e)
+	delete(mc.cache, kv.key)
 }
 
 // Len returns the number of items in the cache.
