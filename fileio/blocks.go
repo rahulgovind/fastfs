@@ -74,12 +74,13 @@ func (bm *BlockManager) writer() {
 		offset := idx * bm.blockSize
 		startTime := time.Now()
 
-		block.mu.Lock()
 		bm.io.WriteAt(offset, block.data)
 		elapsed := time.Since(startTime)
 		if false {
 			log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
 		}
+
+		block.mu.Lock()
 		block.data = nil
 		block.inMemory = false
 		block.mu.Unlock()
