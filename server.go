@@ -30,6 +30,12 @@ type Server struct {
 	localClient  *Client
 	localAddress string
 	fastfs       *FastFS
+	s3UploadChan chan *S3UploadInput
+}
+
+type S3UploadInput struct {
+	Path      string
+	NumBlocks int64
 }
 
 func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatamanager.MetadataManager,
@@ -44,6 +50,11 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatam
 	s.localAddress = fmt.Sprintf("%s:%d", addr, port)
 	s.localClient = NewClient(s.localAddress, dm.BlockSize, dm, p)
 	s.fastfs = fastfs
+	s.s3UploadChan = make(chan *S3UploadInput, 1024)
+
+	for i := 0; i < 3; i += 1{
+		go s.s3uploader()
+	}
 	return s
 }
 
@@ -173,7 +184,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if req.Method == "PUT"  || req.Method == "POST" || cmd == "put" {
+	if req.Method == "PUT" || req.Method == "POST" || cmd == "put" {
 		s.handlePut(w, req, path)
 		return
 	}
@@ -192,12 +203,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if cmd == "confirm" {
+		log.Info("Receiving confirmation request")
+		numBlocksStr := req.URL.Query().Get("numblocks")
+		numBlocks, _ := strconv.ParseInt(numBlocksStr, 10, 64)
+		log.Info("Adding to confirmation queue ", path)
+		s.s3UploadChan <- &S3UploadInput{path, numBlocks}
+		return
+	}
+
 	if cmd == "data" {
 		w.Header().Set("Accept-Ranges", "bytes")
 
 		block := req.URL.Query().Get("block")
 		force := req.URL.Query().Get("force")
-
 
 		if block == "" {
 
@@ -301,7 +320,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			// No one else has it. Just fetch it from S3 lol
-			fmt.Println("Block hit miss. Fetching from S3")
+			fmt.Println("Block hit miss. Fetching from S3. ", path)
 			data, err = s.dm.Get(path, blockNum)
 			if err != nil {
 				log.Fatal(err)
@@ -386,4 +405,29 @@ func (s *Server) getCompressionWriter(w http.ResponseWriter, req *http.Request) 
 		compression = "deflate"
 	}
 	return getWriterWraper(w, compression)
+}
+
+func (s *Server) s3uploader() {
+	for {
+		uploadInput := <-s.s3UploadChan
+		path := uploadInput.Path
+		log.Info("Starting upload for ", path)
+
+		reader, writer := io.Pipe()
+		go s.dm.Upload(path, reader)
+
+		for i := int64(0); i < uploadInput.NumBlocks; i += 1 {
+			log.Infof("Uploading %s block %d", path, i)
+			target := s.partitioner.GetServer(path, i)
+
+			data, err := s.localClient.DirectGet(path, i, target, false)
+			if err != nil {
+				log.Fatal(err)
+			}
+			writer.Write(data)
+		}
+		writer.Close()
+
+		log.Info("Done uploading ", path)
+	}
 }

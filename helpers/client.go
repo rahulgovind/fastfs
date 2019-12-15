@@ -22,13 +22,14 @@ import (
 )
 
 type Client struct {
-	primaryAddr string
-	servers     []string
-	BlockSize   int64
-	LookAhead   int
-	Queue       chan *InputData
-	cmap        *consistenthash.Map
-	objectCache *lru.Cache
+	primaryAddr  string
+	servers      []string
+	BlockSize    int64
+	LookAhead    int
+	Queue        chan *InputData
+	cmap         *consistenthash.Map
+	objectCache  *lru.Cache
+	S3UploadChan chan *BlockUploadInput
 }
 
 type InputData struct {
@@ -42,6 +43,14 @@ type BlockData struct {
 	data  *bytes.Buffer
 	path  string
 	block int64
+}
+
+type BlockUploadInput struct {
+	filepath string
+	block    int64
+	data     []byte
+	sem      chan bool
+	wg       *sync.WaitGroup
 }
 
 type DownloadReadCloser struct {
@@ -127,11 +136,16 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 
 	c.cmap = consistenthash.New(3, nil)
 	c.objectCache, _ = lru.New(10240)
+	c.S3UploadChan = make(chan *BlockUploadInput, 32)
 
 	c.getServers()
 
 	for i := 0; i < lookAhead; i += 1 {
 		go c.downloader()
+	}
+
+	for i := 0; i < lookAhead; i += 1 {
+		go c.blockUploader()
 	}
 	return c
 }
@@ -277,7 +291,6 @@ func (r *OffsetReader) load() {
 
 	//log.Infof("Ranges: %v\t%v", start, end)
 	readBuffer := bytes.NewBuffer(make([]byte, 0, blockSize))
-
 
 	for i := 0; i < r.lookAhead; i++ {
 		r.client.Queue <- &InputData{r.path, nextDownload,
@@ -540,3 +553,4 @@ func (c *Client) Delete(filename string) {
 	resp, _ := makeRequest(fmt.Sprintf("http://%s/data/%s", c.primaryAddr, filename), "DELETE")
 	resp.Body.Close()
 }
+

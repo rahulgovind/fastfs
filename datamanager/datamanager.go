@@ -95,7 +95,7 @@ func (dm *DataManager) Start() {
 	}
 }
 
-// Given path and block number download file
+// Given Path and block number download file
 func (dm *DataManager) download(path string, block int64) ([]byte, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, dm.BlockSize))
 
@@ -275,9 +275,9 @@ func (dm *DataManager) uploader() {
 
 		target := dm.partitioner.GetServer(u.path, u.block)
 		if target == dm.ServerAddr {
-			//log.Errorf("Inserting locally %v %v for %v", u.path, u.block, target)
+			//log.Errorf("Inserting locally %v %v for %v", u.Path, u.block, target)
 			dm.CachePut(u.path, u.block, u.buf.Bytes())
-			<- u.sem
+			<-u.sem
 			continue
 		}
 
@@ -311,6 +311,6 @@ func (dm *DataManager) uploader() {
 			break
 		}
 		u.buf.Reset()
-		<- u.sem
+		<-u.sem
 	}
 }
