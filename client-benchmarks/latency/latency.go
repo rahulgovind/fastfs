@@ -55,5 +55,5 @@ func main() {
 		elapsed = time.Since(start)
 		total += elapsed.Nanoseconds()
 	}
-	fmt.Printf("Took %v microseconds", float64(total)/float64(numIterations))
+	fmt.Printf("Took %v microseconds", float64(total)/float64(numIterations) / 1000)
 }
