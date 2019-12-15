@@ -587,7 +587,7 @@ func (c *Client) Query(path string, numSplits int64, condition string, col int, 
 	}
 
 	for offset := int64(0); offset < fi.Size; offset += chunkSize {
-		resp, err := makeRangeRequest(fmt.Sprintf("http://%s/query/%s?col=%d&conditon=%s", c.primaryAddr, path, col, condition),
+		resp, err := makeRangeRequest(fmt.Sprintf("http://%s/query/%s?col=%d&condition=%s", c.primaryAddr, path, col, condition),
 			"GET", offset, min(offset + chunkSize - 1, fi.Size - 1))
 
 		if err != nil {

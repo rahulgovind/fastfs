@@ -5,12 +5,14 @@ import "bytes"
 func AlignedSlices(raw []byte, startSkip bool, blockSize int64) []byte {
 	startOffset := int64(0)
 
-	if startSkip {
+	if !startSkip {
 		startOffset := bytes.LastIndex(raw[:blockSize], []byte{0x0a})
 		if startOffset == -1 {
 			return []byte{}
 		}
+		startOffset += 1
 	}
+
 	skipOffset := startOffset
 	if int64(len(raw))-blockSize > skipOffset {
 		skipOffset = int64(len(raw)) - blockSize

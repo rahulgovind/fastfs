@@ -16,6 +16,7 @@ func main() {
 	conditinoFlag := flag.String("condition", "FERR", "Condition ")
 	colFlag := flag.Int("column", 8, "Condition ")
 	out := flag.String("out", "/dev/null", "Output file")
+	numSplits := flag.Int("num-splits", 5, "Number of pslits")
 	flag.Parse()
 
 	f, err := os.Create(*out)
@@ -27,7 +28,7 @@ func main() {
 	// 3897 on entire dataset
 
 	startTime := time.Now()
-	client.Query(*fileFlag, 5, *conditinoFlag, *colFlag, f)
+	client.Query(*fileFlag, int64(*numSplits), *conditinoFlag, *colFlag, f)
 	elapsed := time.Since(startTime)
 	fmt.Printf("Query took %v", elapsed)
 }

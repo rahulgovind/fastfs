@@ -199,7 +199,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		colNum, _ := strconv.ParseInt(col, 10, 64)
 
 		condition := req.URL.Query().Get("condition")
-		s.queryHandler(path, w, 0, -1, condition, colNum)
+
+		rangeString := req.Header.Get("Range")
+		log.Info("Range string: ", rangeString)
+		start, end := int64(0), int64(-1)
+		if rangeString != "" {
+			ranges, _ := parseRange(rangeString, math.MaxInt64>>3)
+			start = ranges[0].start
+			end = ranges[0].start + ranges[0].length - 1
+		}
+
+		s.queryHandler(path, w, start, end, condition, colNum)
 		return
 	}
 
