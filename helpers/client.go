@@ -128,6 +128,23 @@ func makeRequest(url string, method string) (*http.Response, error) {
 	return resp, nil
 }
 
+func makeRangeRequest(url string, method string, start int64, end int64) (*http.Response, error) {
+	var client http.Client
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+		log.Fatal(err)
+	}
+
+	return resp, nil
+}
+
 func New(addr string, numDownloaders int, lookAhead int) *Client {
 	c := new(Client)
 	c.primaryAddr = addr
@@ -137,7 +154,7 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 	c.cmap = consistenthash.New(3, nil)
 	c.objectCache, _ = lru.New(10240)
 	c.S3UploadChan = make(chan *BlockUploadInput, 32)
-	
+
 	c.getServers()
 
 	for i := 0; i < lookAhead; i += 1 {
@@ -554,3 +571,31 @@ func (c *Client) Delete(filename string) {
 	resp.Body.Close()
 }
 
+// Split query sends `numSplits` chunks to make queries on them
+func (c *Client) Query(path string, numSplits int64, condition string, col int, w io.Writer) error {
+	fi, _ := c.Stat(path)
+	chunkSize := (fi.Size + numSplits - 1)  / numSplits
+	if chunkSize < c.BlockSize {
+		chunkSize = c.BlockSize
+	}
+
+	min := func(x int64, y int64) int64 {
+		if x < y {
+			return x
+		}
+		return y
+	}
+
+	for offset := int64(0); offset < fi.Size; offset += chunkSize {
+		resp, err := makeRangeRequest(fmt.Sprintf("http://%s/query/%s?col=%d&conditon=%s", c.primaryAddr, path, col, condition),
+			"GET", offset, min(offset + chunkSize - 1, fi.Size - 1))
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		io.Copy(w, resp.Body)
+		resp.Body.Close()
+	}
+	return nil
+}
