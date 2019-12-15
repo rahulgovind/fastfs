@@ -137,7 +137,7 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 	c.cmap = consistenthash.New(3, nil)
 	c.objectCache, _ = lru.New(10240)
 	c.S3UploadChan = make(chan *BlockUploadInput, 32)
-
+	
 	c.getServers()
 
 	for i := 0; i < lookAhead; i += 1 {

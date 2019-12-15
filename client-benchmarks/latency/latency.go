@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func makeRequest(url string) {
+func makeRequest(url string, offset int) {
 	var client http.Client
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -18,7 +18,7 @@ func makeRequest(url string) {
 	}
 
 	// Set range header
-	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", 0, 1023))
+	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+1023))
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -30,6 +30,7 @@ func makeRequest(url string) {
 
 func main() {
 	urlFlag := flag.String("url", "", "URL to download from")
+	startFlag := flag.Int("start", 0, "Offset to read from")
 
 	flag.Parse()
 	url := *urlFlag
@@ -38,11 +39,11 @@ func main() {
 	}
 
 	start := time.Now()
-	makeRequest(url)
+	makeRequest(url, *startFlag)
 	elapsed := time.Since(start)
 	fmt.Printf("%v to download 1K (Request 1)\n", elapsed)
 	start = time.Now()
-	makeRequest(url)
+	makeRequest(url, *startFlag)
 	elapsed = time.Since(start)
 	fmt.Printf("%v to download 1K (Request 2)", elapsed)
 }

@@ -116,7 +116,7 @@ func main() {
 	if !verbose {
 		log.SetLevel(log.ErrorLevel)
 	}
-	
+
 	if cpuProfile {
 		defer profile.Start().Stop()
 	}
