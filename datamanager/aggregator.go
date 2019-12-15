@@ -249,7 +249,7 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 		}
 
 		wg.Add(1)
-		rag.uploadChan <- &UploadInput{buf, rag.path, nextUpload, out, wg}
+		rag.uploadChan <- &UploadInput{buf, rag.path, nextUpload, out, &wg}
 		nextUpload += 1
 		if readErr == io.EOF {
 			break
