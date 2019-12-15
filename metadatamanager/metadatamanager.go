@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/golang-lru"
 	"github.com/rahulgovind/fastfs/common"
 	"github.com/rahulgovind/fastfs/s3"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 )
@@ -134,9 +134,9 @@ func (mm *MetadataManager) getListDirect(dir string) (common.FileList, error) {
 }
 
 func (mm *MetadataManager) queryListServer(dir string) (common.FileList, error) {
-	fmt.Println("getListServer ", dir)
+	log.Info("getListServer ", dir)
 	value, ok := mm.centralServer.ListGet(dir)
-	fmt.Println("ok: ", ok)
+	log.Info("ok: ", ok)
 	if ok {
 		var result common.FileList
 		for _, v := range value {

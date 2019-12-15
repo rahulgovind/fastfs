@@ -178,7 +178,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		path = query[firstSlash+1:]
 	}
 
-	fmt.Println("Got: ", req.Method, req.RequestURI)
+	log.Info("Got: ", req.Method, req.RequestURI)
 	if req.Method == "HEAD" {
 		s.handleHead(w, req, path)
 		return
@@ -225,7 +225,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			defer dataWriter.Close()
 
 			rangeString := req.Header.Get("Range")
-			fmt.Println("Range string: ", rangeString)
+			log.Info("Range string: ", rangeString)
 			if rangeString == "" {
 				s.rangeHandler(path, dataWriter, 0, -1)
 				log.Error("Done writing")
@@ -250,7 +250,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if force != "1" {
 				target := s.partitioner.GetServer(path, start/s.localClient.BlockSize)
 
-				fmt.Println(target, s.localAddress)
+				log.Info(target, s.localAddress)
 				if target != s.localAddress {
 					// Bye bye
 					http.Redirect(w, req, fmt.Sprintf("http://%s/data/%s?force=1", target, path),
@@ -259,7 +259,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 			w.WriteHeader(206)
-			fmt.Println("Range parameters: ", start, length)
+			log.Info("Range parameters: ", start, length)
 			s.rangeHandler(path, dataWriter, start, start+length-1)
 		} else {
 
@@ -320,7 +320,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			// No one else has it. Just fetch it from S3 lol
-			fmt.Println("Block hit miss. Fetching from S3. ", path)
+			log.Info("Block hit miss. Fetching from S3. ", path)
 			data, err = s.dm.Get(path, blockNum)
 			if err != nil {
 				log.Fatal("Error on get: ", err)
