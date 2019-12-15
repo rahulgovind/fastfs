@@ -21,5 +21,6 @@ func main() {
 	startTime := time.Now()
 	io.CopyN(ioutil.Discard, reader, 1024)
 	elapsed := time.Since(startTime)
+	reader.Close()
 	fmt.Printf("Downloading 1K of %v took %v", *fileFlag, elapsed)
 }
