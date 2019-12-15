@@ -2,6 +2,7 @@ package memcache
 
 import (
 	"container/list"
+	log "github.com/sirupsen/logrus"
 	"sync"
 )
 
@@ -99,6 +100,7 @@ func (mc *MemCache) RemoveOldest() {
 func (mc *MemCache) removeElement(e *list.Element) {
 	kv := e.Value.(*entry)
 	if mc.OnEvicted != nil {
+		log.Error("Evicting ", kv.key)
 		mc.OnEvicted(kv.key, kv.value)
 	}
 	mc.ll.Remove(e)

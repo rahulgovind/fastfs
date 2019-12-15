@@ -73,8 +73,8 @@ func (c *DiskCache) Add(key string, value []byte) {
 
 // Get looks up a key's value from the cache.
 func (c *DiskCache) Get(key string) (value []byte, ok bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if c.cache == nil {
 		return

@@ -76,9 +76,8 @@ func (bm *BlockManager) writer() {
 
 		bm.io.WriteAt(offset, block.data)
 		elapsed := time.Since(startTime)
-		if false {
-			log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
-		}
+		log.Debugf("Copy to block %d complete. Took %v seconds", idx, elapsed)
+
 
 		block.mu.Lock()
 		block.data = nil
