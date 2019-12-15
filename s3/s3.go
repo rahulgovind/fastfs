@@ -148,12 +148,12 @@ func ByteSpeed(numBytes int64, elapsed time.Duration) string {
 }
 
 type FakeWriterAt struct {
-	w io.Writer
+	W io.Writer
 }
 
 func (fw *FakeWriterAt) WriteAt(p []byte, offset int64) (n int, err error) {
 	// ignore 'offset' because we forced sequential downloads
-	return fw.w.Write(p)
+	return fw.W.Write(p)
 }
 
 func GetDownloader() *s3manager.Downloader {
