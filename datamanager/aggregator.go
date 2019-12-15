@@ -4,6 +4,7 @@ import (
 	"bytes"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"sync"
 	"time"
 )
 
@@ -229,6 +230,7 @@ func (rag *ReverseAggregator) Close() error {
 func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 	nextUpload := int64(0)
 	out := make(chan bool, rag.lookAhead)
+	wg := sync.WaitGroup{}
 
 	for {
 		out <- true
@@ -246,12 +248,14 @@ func (rag *ReverseAggregator) ReadFrom(reader io.Reader) {
 			log.Fatal(err)
 		}
 
-		rag.uploadChan <- &UploadInput{buf, rag.path, nextUpload, out}
+		wg.Add(1)
+		rag.uploadChan <- &UploadInput{buf, rag.path, nextUpload, out, wg}
 		nextUpload += 1
 		if readErr == io.EOF {
 			break
 		}
 	}
 
+	wg.Done()
 	rag.writer.Close()
 }

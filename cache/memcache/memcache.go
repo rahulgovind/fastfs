@@ -47,6 +47,8 @@ func (mc *MemCache) Add(key string, value []byte) {
 		mc.cache = make(map[interface{}]*list.Element)
 		mc.ll = list.New()
 	}
+
+	log.Info("Adding to cache: ", key)
 	if ee, ok := mc.cache[key]; ok {
 		mc.ll.MoveToFront(ee)
 		ee.Value.(*entry).value = value

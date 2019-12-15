@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -54,6 +55,7 @@ type UploadInput struct {
 	path  string
 	block int64
 	sem   chan bool
+	wg    *sync.WaitGroup
 }
 
 type BlockGetter interface {
@@ -156,11 +158,11 @@ func (dm *DataManager) uniqueGet(path string, block int64) ([]byte, error) {
 		ch := make(chan []byte, 1)
 		dm.requestCh <- DownloadElement{fLink, ch}
 		data = <-ch
+		dm.cache.Add(fLink, data)
 
 		if dm.mm != nil {
 			dm.mm.SetLocation(path, block, dm.ServerAddr)
 		}
-		dm.cache.Add(fLink, data)
 	}
 	return data, nil
 }
@@ -191,10 +193,11 @@ func (dm *DataManager) CachePut(path string, block int64, data []byte) error {
 	fLink := CacheKeyToString(path, block)
 	//fmt.Println("Adding to cache: ", fLink)
 
+	dm.cache.Add(fLink, data)
+
 	if dm.mm != nil {
 		dm.mm.SetLocation(path, block, dm.ServerAddr)
 	}
-	dm.cache.Add(fLink, data)
 
 	return nil
 }
