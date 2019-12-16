@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -14,7 +15,7 @@ import (
 // Block Upload code
 func (c *Client) putBlock(filepath string, block int64, data []byte) error {
 	for {
-		target := c.cmap.Get(fmt.Sprintf("%s-%d", filepath, block))
+		target := c.cmap.Get(fmt.Sprintf("%s:%d", filepath, block))
 
 		url := fmt.Sprintf("http://%s/put/%s?block=%d", target, filepath, block)
 
@@ -53,15 +54,15 @@ func (c *Client) putBlock(filepath string, block int64, data []byte) error {
 	return nil
 }
 
-func (c *Client) finalizeBlocks(filepath string, numBlocks int64) error {
+func (c *Client) finalizeBlocks(filepath string, numBlocks int64, numWritten int64) error {
 	if numBlocks == 0 {
 		return nil
 	}
 
 	for {
-		target := c.cmap.Get(filepath)
+		target := c.cmap.Get(fmt.Sprintf("%d", rand.Intn(1024*1024)))
 
-		url := fmt.Sprintf("http://%s/confirm/%s?numblocks=%d", target, filepath, numBlocks)
+		url := fmt.Sprintf("http://%s/confirm/%s?numblocks=%d&numwritten=%d", target, filepath, numBlocks, numWritten)
 
 		maxRetries := 3
 		numRetries := 0
@@ -161,14 +162,15 @@ func (u *BlockUploadWriter) readFrom(reader io.Reader) {
 	blockSize := u.client.BlockSize
 	nextUpload := int64(0)
 	sem := make(chan bool, 128)
+	n := int64(0)
 
 	for {
 
 		sem <- true
 		buf := bytes.NewBuffer(nil)
 
-		_, readErr := io.CopyN(buf, reader, blockSize)
-
+		ni, readErr := io.CopyN(buf, reader, blockSize)
+		n += ni
 		if readErr != nil && readErr != io.EOF {
 			log.Fatal(readErr)
 		}
@@ -184,7 +186,7 @@ func (u *BlockUploadWriter) readFrom(reader io.Reader) {
 	log.Info("Waiting for all blocks")
 	u.waitForAllBlockUploads()
 	log.Info("Finalizing blocks")
-	u.client.finalizeBlocks(u.filePath, nextUpload)
+	u.client.finalizeBlocks(u.filePath, nextUpload, n)
 	u.done <- true
 	log.Info("Done!")
 }

@@ -36,6 +36,7 @@ type Server struct {
 type S3UploadInput struct {
 	Path      string
 	NumBlocks int64
+	Size      int64
 }
 
 func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatamanager.MetadataManager,
@@ -217,8 +218,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		log.Info("Receiving confirmation request")
 		numBlocksStr := req.URL.Query().Get("numblocks")
 		numBlocks, _ := strconv.ParseInt(numBlocksStr, 10, 64)
+		size, _ := strconv.ParseInt(req.URL.Query().Get("numwritten"), 10, 64)
 		log.Info("Adding to confirmation queue ", path)
-		s.s3UploadChan <- &S3UploadInput{path, numBlocks}
+		s.s3UploadChan <- &S3UploadInput{path, numBlocks, size}
 		return
 	}
 
@@ -427,6 +429,7 @@ func (s *Server) s3uploader() {
 		reader, writer := io.Pipe()
 		go s.dm.Upload(path, reader)
 
+		n := int64(0)
 		for i := int64(0); i < uploadInput.NumBlocks; i += 1 {
 			log.Infof("Uploading %s block %d", path, i)
 			target := s.partitioner.GetServer(path, i)
@@ -435,10 +438,11 @@ func (s *Server) s3uploader() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			writer.Write(data)
+			ni, _ := writer.Write(data)
+			n += int64(ni)
 		}
 		writer.Close()
 
-		log.Info("Done uploading ", path)
+		log.Errorf("Done uploading %v\tSize given: %v\tSize uploaded: %v", path, uploadInput.Size, n)
 	}
 }
