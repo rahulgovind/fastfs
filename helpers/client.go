@@ -209,7 +209,7 @@ func (c *Client) getServers() {
 }
 
 func (c *Client) getBlock(path string, block int64, w io.Writer) error {
-	target := c.cmap.Get(fmt.Sprintf("%s-%d", path, block))
+	target := c.cmap.Get(fmt.Sprintf("%s:%d", path, block))
 
 	var client http.Client
 	req, err := http.NewRequest("GET",
