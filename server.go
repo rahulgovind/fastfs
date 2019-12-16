@@ -409,7 +409,7 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 
 func (s *Server) handleDelete(w http.ResponseWriter, req *http.Request, path string) {
 	log.Error("Deleting ", path)
-	s.dm.Delete(path)
+	go s.dm.Delete(path)
 }
 
 func (s *Server) Serve() {
