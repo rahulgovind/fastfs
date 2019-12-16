@@ -2,7 +2,7 @@ package consistenthash
 
 // https://github.com/golang/groupcache/blob/master/consistenthash/consistenthash.go
 import (
-	"hash/crc32"
+	"github.com/rahulgovind/fastfs/hash"
 	"sort"
 	"strconv"
 	"sync"
@@ -26,7 +26,8 @@ func New(replicas int, fn Hash) *Map {
 		hashMap:  make(map[int]string),
 	}
 	if m.hash == nil {
-		m.hash = crc32.ChecksumIEEE
+		m.hash = hash.HashInt32
+		//m.hash = crc32.ChecksumIEEE
 	}
 	return m
 }

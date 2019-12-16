@@ -31,6 +31,7 @@ func main() {
 	var maxMem int
 	var maxDisk int
 	var cpuProfile bool
+	var diskCache string
 
 	app := cli.NewApp()
 	app.Name = "FastFS Node"
@@ -111,6 +112,12 @@ func main() {
 			Usage:       "Profile CPU",
 			Destination: &cpuProfile,
 		},
+		&cli.StringFlag{
+			Name:        "disk-location",
+			Usage:       "Location to store disk cache",
+			Destination: &diskCache,
+			Value:       "/tmp/testdata",
+		},
 	}
 
 	if !verbose {
@@ -135,7 +142,7 @@ func main() {
 	maxDiskEntries := int64(1024*1024*maxDisk) / blockSize
 	//log.SetLevel(log.ErrorLevel)
 	hc := hybridcache.NewMemDiskHybridCache(maxMemEntries, maxDiskEntries, blockSize,
-		"/tmp/testdata", fileio.FileInterface)
+		diskCache, fileio.FileInterface)
 	//c := diskv2.NewDiskV2Cache("/tmp/fastfs", 1024*1024)
 	//c.Clear()
 	//c := badgercache.NewBadgerCache()
