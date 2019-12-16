@@ -151,7 +151,7 @@ func New(addr string, numDownloaders int, lookAhead int) *Client {
 	c.LookAhead = lookAhead
 	c.Queue = make(chan *InputData, 10000)
 
-	c.cmap = consistenthash.New(3, nil)
+	c.cmap = consistenthash.New(7, nil)
 	c.objectCache, _ = lru.New(10240)
 	c.S3UploadChan = make(chan *BlockUploadInput, 32)
 

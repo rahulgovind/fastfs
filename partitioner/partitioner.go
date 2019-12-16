@@ -24,7 +24,7 @@ type HashPartitioner struct {
 
 func NewHashPartitioner() *HashPartitioner {
 	hp := new(HashPartitioner)
-	hp.hm = consistenthash.New(3, nil)
+	hp.hm = consistenthash.New(7, nil)
 	return hp
 }
 
