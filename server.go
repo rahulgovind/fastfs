@@ -31,6 +31,7 @@ type Server struct {
 	localAddress string
 	fastfs       *FastFS
 	s3UploadChan chan *S3UploadInput
+	//uploadBucket *ratelimit.Bucket
 }
 
 type S3UploadInput struct {
@@ -52,7 +53,8 @@ func NewServer(addr string, port int, dm *datamanager.DataManager, mm *metadatam
 	s.localClient = NewClient(s.localAddress, dm.BlockSize, dm, p)
 	s.fastfs = fastfs
 	s.s3UploadChan = make(chan *S3UploadInput, 1024)
-
+	//s.uploadBucket = ratelimit.NewBucketWithQuantum(10 * time.Millisecond, 1024 * 1024 * 100,
+	//	1024 * 1024)
 	for i := 0; i < 3; i += 1 {
 		go s.s3uploader()
 	}
@@ -406,7 +408,7 @@ func (s *Server) handlePut(w http.ResponseWriter, req *http.Request, path string
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, req *http.Request, path string) {
-	log.Info("Deleting ", path)
+	log.Error("Deleting ", path)
 	s.dm.Delete(path)
 }
 
