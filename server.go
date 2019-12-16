@@ -220,6 +220,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		numBlocks, _ := strconv.ParseInt(numBlocksStr, 10, 64)
 		size, _ := strconv.ParseInt(req.URL.Query().Get("numwritten"), 10, 64)
 		log.Info("Adding to confirmation queue ", path)
+
+		lastIndex := strings.LastIndex(path, "/")
+		dir := ""
+		if lastIndex != -1 {
+			dir = path[:lastIndex+1]
+		}
+		s.mm.AddToList(dir, path, size)
+
 		s.s3UploadChan <- &S3UploadInput{path, numBlocks, size}
 		return
 	}
